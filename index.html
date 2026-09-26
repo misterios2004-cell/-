@@ -1,0 +1,872 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Свиньи в окопах</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Russo+One&family=Rubik:wght@400;500;700&display=swap">
+<style>
+:root{
+  --mud:#2B2017; --mud2:#3A2B1E; --khaki:#D9C99A; --paper:#EFE5C8; --ink:#241a11;
+  --olive:#5E6B35; --muted:#B5A47F; --pink:#F2A3A8;
+  color-scheme:dark;
+}
+html,body{background:var(--mud);color:var(--paper)}
+body{margin:0;font:15px/1.5 Rubik,system-ui,-apple-system,"Segoe UI",sans-serif;padding-inline:16px;padding-block:16px 32px}
+.wrap{max-width:1180px;margin:0 auto;display:flex;flex-direction:column;gap:12px}
+header{display:flex;flex-wrap:wrap;align-items:baseline;justify-content:space-between;gap:4px 16px}
+h1{font:400 clamp(24px,4vw,34px)/1.1 "Russo One",Impact,"Arial Black",sans-serif;letter-spacing:.04em;margin:0;color:var(--khaki);text-transform:uppercase;text-wrap:balance}
+header p{margin:0;color:var(--muted);font-size:14px}
+.stage{position:relative;border:3px solid #150f09;border-radius:6px;overflow:hidden;background:var(--mud2);box-shadow:0 10px 30px rgba(0,0,0,.45)}
+canvas{display:block;width:100%;height:auto;aspect-ratio:2/1;touch-action:none;cursor:crosshair;background:#9fb8bb}
+.overlay{position:absolute;inset:0;display:grid;place-items:center;background:rgba(30,22,14,.55);overflow:auto;padding:16px}
+.panel{background:var(--paper);color:var(--ink);padding:20px 24px;border-radius:4px;max-width:460px;width:100%;border:2px solid var(--ink);box-shadow:6px 6px 0 rgba(0,0,0,.35);display:flex;flex-direction:column;gap:14px}
+.panel h2{font:400 26px/1.1 "Russo One",Impact,sans-serif;margin:0;letter-spacing:.03em;text-transform:uppercase;text-wrap:balance}
+.panel p{margin:0}
+fieldset{border:0;margin:0;padding:0;display:flex;flex-direction:column;gap:6px}
+legend{font-size:12px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:#6b5436;padding:0;margin-bottom:6px}
+.seg{display:flex;flex-wrap:wrap;gap:6px}
+.seg label{position:relative}
+.seg input{position:absolute;opacity:0;pointer-events:none}
+.seg span{display:inline-block;padding:6px 12px;border:2px solid var(--ink);border-radius:4px;background:var(--khaki);cursor:pointer;font-weight:500;user-select:none}
+.seg input:checked+span{background:var(--olive);color:var(--paper)}
+.seg input:focus-visible+span{outline:3px solid #b8616a;outline-offset:2px}
+.controls{display:flex;flex-wrap:wrap;gap:8px 16px;justify-content:space-between;align-items:center}
+.group{display:flex;flex-wrap:wrap;gap:6px;align-items:center}
+.btn{font:500 14px/1.2 Rubik,system-ui,sans-serif;background:var(--khaki);color:var(--ink);border:2px solid var(--ink);border-bottom-width:4px;border-radius:4px;padding:8px 12px;cursor:pointer;touch-action:manipulation;user-select:none;-webkit-user-select:none;display:inline-flex;gap:6px;align-items:center}
+.btn:active{transform:translateY(2px);border-bottom-width:2px}
+.btn.on{background:var(--olive);color:var(--paper)}
+.btn:disabled{opacity:.45;cursor:default}
+.btn:focus-visible{outline:3px solid var(--pink);outline-offset:2px}
+.btn kbd{font:700 11px Rubik,sans-serif;opacity:.6}
+.btn.big{font-size:17px;padding:10px 18px;align-self:flex-start;font-family:"Russo One",Impact,sans-serif;letter-spacing:.04em}
+.stam{display:flex;align-items:center;gap:8px;font-size:13px;color:var(--muted)}
+.stam i{display:block;width:90px;height:8px;background:#1a130c;border-radius:4px;overflow:hidden}
+.stam b{display:block;height:100%;background:var(--khaki);width:100%}
+.help{color:var(--muted);font-size:13px;display:flex;flex-wrap:wrap;gap:4px 18px}
+.help kbd{font:700 12px Rubik,sans-serif;color:var(--paper);background:var(--mud2);border:1px solid #5a4630;border-radius:3px;padding:0 5px}
+@media (max-width:700px){
+  .overlay{position:static;background:var(--mud2)}
+  .panel{box-shadow:none}
+}
+[hidden]{display:none!important}
+@media (prefers-reduced-motion:reduce){.btn:active{transform:none}}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>Свиньи в окопах</h1>
+    <p>Пошаговая свиная война на разрушаемой местности</p>
+  </header>
+
+  <div class="stage">
+    <canvas id="game" width="1400" height="700" aria-label="Игровое поле"></canvas>
+    <div id="menu" class="overlay">
+      <form class="panel" id="menuForm">
+        <h2>Новая битва</h2>
+        <p>Уничтожьте всех свиней противника. Учитывайте ветер: он сносит снаряды базуки и бомбы авиаудара.</p>
+        <fieldset><legend>Противник</legend>
+          <div class="seg">
+            <label><input type="radio" name="mode" id="mode-cpu" value="cpu" checked><span>Компьютер</span></label>
+            <label><input type="radio" name="mode" id="mode-hot" value="hot"><span>Друг за этим экраном</span></label>
+          </div>
+        </fieldset>
+        <fieldset><legend>Свиней в отряде</legend>
+          <div class="seg">
+            <label><input type="radio" name="per" id="per-2" value="2"><span>2</span></label>
+            <label><input type="radio" name="per" id="per-3" value="3" checked><span>3</span></label>
+            <label><input type="radio" name="per" id="per-4" value="4"><span>4</span></label>
+          </div>
+        </fieldset>
+        <fieldset><legend>Меткость компьютера</legend>
+          <div class="seg">
+            <label><input type="radio" name="diff" id="diff-1" value="2.6"><span>Новобранец</span></label>
+            <label><input type="radio" name="diff" id="diff-2" value="1.3" checked><span>Сержант</span></label>
+            <label><input type="radio" name="diff" id="diff-3" value="0.35"><span>Генерал</span></label>
+          </div>
+        </fieldset>
+        <button class="btn big" type="submit" id="startBtn">В бой!</button>
+      </form>
+    </div>
+    <div id="over" class="overlay" hidden>
+      <div class="panel">
+        <h2 id="overTitle">Победа</h2>
+        <p id="overText"></p>
+        <button class="btn big" type="button" id="againBtn">Ещё раз</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="controls">
+    <div class="group" id="weapons"></div>
+    <div class="group">
+      <span class="stam">Бег <i><b id="stamBar"></b></i></span>
+      <button class="btn" type="button" id="bLeft" aria-label="Идти влево">◀</button>
+      <button class="btn" type="button" id="bJump">Прыжок</button>
+      <button class="btn" type="button" id="bRight" aria-label="Идти вправо">▶</button>
+      <button class="btn" type="button" id="bEnd">Пропустить ход</button>
+      <button class="btn" type="button" id="bSound">Звук: вкл</button>
+    </div>
+  </div>
+  <div class="help">
+    <span>Мышь или палец: прицел</span>
+    <span>Зажать и отпустить: выстрел, чем дольше, тем сильнее</span>
+    <span><kbd>←</kbd><kbd>→</kbd> ходьба</span>
+    <span><kbd>↑</kbd><kbd>↓</kbd> угол</span>
+    <span><kbd>Пробел</kbd> огонь</span>
+    <span><kbd>Enter</kbd> прыжок</span>
+    <span><kbd>1</kbd>–<kbd>4</kbd> оружие</span>
+  </div>
+</div>
+
+<script>
+(() => {
+'use strict';
+const W = 1400, H = 700, WATER = H - 36, G = 0.25, R = 10;
+const cv = document.getElementById('game'), ctx = cv.getContext('2d');
+const terr = document.createElement('canvas'); terr.width = W; terr.height = H;
+const tctx = terr.getContext('2d');
+const bg = document.createElement('canvas'); bg.width = W; bg.height = H;
+const bctx = bg.getContext('2d');
+const mask = new Uint8Array(W * H);
+
+const TEAM = [
+  { name: 'Красные', col: '#C8423B', dark: '#7E2520' },
+  { name: 'Синие', col: '#3F6FA8', dark: '#223F66' },
+];
+const NAMES = [['Бекон', 'Шпик', 'Окорок', 'Рулька'], ['Грудинка', 'Буженина', 'Карбонат', 'Сарделька']];
+const WEAPONS = {
+  bazooka:   { name: 'Базука',   key: '1', charge: true,  r: 34, dmg: 45, speed: 15 },
+  grenade:   { name: 'Граната',  key: '2', charge: true,  r: 42, dmg: 50, speed: 13, fuse: 180 },
+  shotgun:   { name: 'Дробовик', key: '3', charge: false, r: 14, dmg: 25 },
+  airstrike: { name: 'Авиаудар', key: '4', charge: false, r: 28, dmg: 30, ammo: 1 },
+};
+
+let S = null;
+const keys = {};
+let clouds = [];
+
+/* ---------- утилиты ---------- */
+const rnd = (a, b) => a + Math.random() * (b - a);
+const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+function solid(x, y) {
+  x |= 0; y |= 0;
+  if (x < 0 || x >= W || y < 0 || y >= H) return false;
+  return mask[y * W + x] === 1;
+}
+function surf(x) { for (let y = 0; y < H; y++) if (solid(x, y)) return y; return H; }
+function hash(x, y) { let h = (x * 374761393 + y * 668265263) | 0; h = (h ^ (h >>> 13)) * 1274126177; return ((h ^ (h >>> 16)) >>> 0) / 4294967295; }
+const aliveOf = t => S.pigs.filter(p => p.team === t && p.state === 'alive');
+const isCPU = t => S.mode === 'cpu' && t === 1;
+
+/* ---------- звук ---------- */
+let AC = null, muted = false;
+function audioInit() { try { AC = AC || new (window.AudioContext || window.webkitAudioContext)(); if (AC.state === 'suspended') AC.resume(); } catch (e) { AC = null; } }
+function boom(size) {
+  if (!AC || muted) return;
+  const len = 0.25 + size * 0.012, sr = AC.sampleRate, buf = AC.createBuffer(1, sr * len, sr), d = buf.getChannelData(0);
+  for (let i = 0; i < d.length; i++) d[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / d.length, 2);
+  const src = AC.createBufferSource(); src.buffer = buf;
+  const f = AC.createBiquadFilter(); f.type = 'lowpass'; f.frequency.value = 500 + size * 12;
+  const g = AC.createGain(); g.gain.value = 0.5;
+  src.connect(f).connect(g).connect(AC.destination); src.start();
+}
+function tone(f1, f2, dur, type = 'square', vol = 0.08) {
+  if (!AC || muted) return;
+  const o = AC.createOscillator(), g = AC.createGain(), t = AC.currentTime;
+  o.type = type; o.frequency.setValueAtTime(f1, t); o.frequency.exponentialRampToValueAtTime(f2, t + dur);
+  g.gain.setValueAtTime(vol, t); g.gain.exponentialRampToValueAtTime(0.001, t + dur);
+  o.connect(g).connect(AC.destination); o.start(t); o.stop(t + dur);
+}
+const oink = () => { tone(420, 260, 0.12, 'sawtooth', 0.06); setTimeout(() => tone(380, 220, 0.14, 'sawtooth', 0.06), 130); };
+const splashSnd = () => tone(900, 120, 0.35, 'sine', 0.08);
+
+/* ---------- мир ---------- */
+function genTerrain() {
+  mask.fill(0);
+  const s1 = rnd(0, 100), s2 = rnd(0, 100), s3 = rnd(0, 100);
+  const base = H * rnd(0.5, 0.58);
+  const top = new Int16Array(W);
+  for (let x = 0; x < W; x++) {
+    let h = base + Math.sin(x * 0.0045 + s1) * 80 + Math.sin(x * 0.012 + s2) * 40 + Math.sin(x * 0.031 + s3) * 12;
+    const e = Math.min(x, W - 1 - x);
+    if (e < 170) h += (170 - e) * (170 - e) / 170 * 1.8;
+    h = clamp(h | 0, 160, H);
+    top[x] = h;
+    for (let y = h; y < H; y++) mask[y * W + x] = 1;
+  }
+  // пещеры и нависающие уступы
+  for (let k = 0; k < 3; k++) {
+    const cx = rnd(220, W - 220) | 0, cy = top[cx] + rnd(45, 110), r = rnd(22, 42);
+    for (let y = -r; y <= r; y++) for (let x = -r * 1.6; x <= r * 1.6; x++) {
+      if ((x / 1.6) ** 2 + y * y <= r * r) { const px = (cx + x) | 0, py = (cy + y) | 0; if (px >= 0 && px < W && py >= 0 && py < H) mask[py * W + px] = 0; }
+    }
+  }
+  const img = tctx.createImageData(W, H), d = img.data;
+  for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
+    if (!mask[y * W + x]) continue;
+    const depth = y - top[x], n = hash(x, y), i = (y * W + x) * 4;
+    let r, g, b;
+    if (depth >= 0 && depth < 5) { r = 104; g = 138; b = 58; }
+    else if (depth >= 0 && depth < 10) { r = 78; g = 104; b = 44; }
+    else {
+      const band = Math.sin(y * 0.09 + Math.sin(x * 0.015) * 2.2);
+      r = 138; g = 100; b = 64;
+      if (band > 0.55) { r = 116; g = 80; b = 47; }
+      const dk = Math.min(0.35, Math.max(0, depth) / 900);
+      r *= 1 - dk; g *= 1 - dk; b *= 1 - dk;
+      if (n > 0.995) { r = 150; g = 142; b = 128; }
+    }
+    const v = (n - 0.5) * 18;
+    d[i] = r + v; d[i + 1] = g + v; d[i + 2] = b + v; d[i + 3] = 255;
+  }
+  tctx.clearRect(0, 0, W, H);
+  tctx.putImageData(img, 0, 0);
+}
+
+function drawBg() {
+  const g = bctx.createLinearGradient(0, 0, 0, H);
+  g.addColorStop(0, '#8FAEB6'); g.addColorStop(0.6, '#D6CDA8'); g.addColorStop(1, '#C9B98A');
+  bctx.fillStyle = g; bctx.fillRect(0, 0, W, H);
+  bctx.fillStyle = 'rgba(255,236,190,.55)';
+  bctx.beginPath(); bctx.arc(W * 0.78, 130, 46, 0, Math.PI * 2); bctx.fill();
+  const layers = [['#A6AE8E', 380, 60, 0.004], ['#8B9677', 440, 45, 0.007]];
+  for (const [col, y0, amp, f] of layers) {
+    const ph = rnd(0, 10);
+    bctx.fillStyle = col; bctx.beginPath(); bctx.moveTo(0, H);
+    for (let x = 0; x <= W; x += 10) bctx.lineTo(x, y0 + Math.sin(x * f + ph) * amp + Math.sin(x * f * 3.1 + ph) * amp * 0.3);
+    bctx.lineTo(W, H); bctx.fill();
+  }
+  // колючая проволока на дальнем холме
+  bctx.strokeStyle = 'rgba(60,55,40,.35)'; bctx.lineWidth = 2;
+  for (let x = 40; x < W; x += 70) {
+    const y = 470 + Math.sin(x * 0.01) * 10;
+    bctx.beginPath(); bctx.moveTo(x, y); bctx.lineTo(x + 3, y - 22); bctx.stroke();
+  }
+  bctx.lineWidth = 1; bctx.beginPath();
+  for (let x = 40; x < W; x += 5) bctx.lineTo(x, 470 + Math.sin(x * 0.01) * 10 - 16 + Math.sin(x * 0.4) * 2);
+  bctx.stroke();
+  clouds = Array.from({ length: 6 }, () => ({ x: rnd(0, W), y: rnd(40, 200), s: rnd(0.7, 1.4) }));
+}
+
+function spawnPigs() {
+  for (let t = 0; t < 2; t++) for (let i = 0; i < S.per; i++) {
+    let x, tries = 0;
+    do {
+      x = (t === 0 ? rnd(90, W / 2 - 80) : rnd(W / 2 + 80, W - 90)) | 0; tries++;
+    } while ((surf(x) > WATER - 40 || S.pigs.some(p => Math.abs(p.x - x) < 70)) && tries < 300);
+    S.pigs.push({ team: t, name: NAMES[t][i], x, y: surf(x) - 1, vx: 0, vy: 0, hp: 100, state: 'alive', face: t === 0 ? 1 : -1, ground: true });
+  }
+}
+
+/* ---------- ход ---------- */
+function newGame(opts, paused) {
+  S = {
+    mode: opts.mode, per: opts.per, diff: opts.diff, paused: !!paused,
+    pigs: [], teams: [{ idx: -1, ammo: { airstrike: 1 } }, { idx: -1, ammo: { airstrike: 1 } }],
+    cur: Math.random() < 0.5 ? 0 : 1, active: null, proj: [], parts: [], texts: [], tracers: [],
+    wind: 0, timer: 0, stamina: 0, state: 'aim', weapon: 'bazooka', aim: -0.6, power: 0, charging: false,
+    shake: 0, settle: 0, resolveT: 0, msg: '', msgT: 0, tick: 0, cpu: null, over: false, ptr: null, plane: null, target: null,
+  };
+  genTerrain(); drawBg(); spawnPigs(); nextTurn();
+}
+
+function nextTurn() {
+  const a0 = aliveOf(0).length, a1 = aliveOf(1).length;
+  if (!a0 || !a1) { endGame(a0 ? 0 : a1 ? 1 : -1); return; }
+  S.cur = 1 - S.cur;
+  const list = S.pigs.filter(p => p.team === S.cur), tm = S.teams[S.cur];
+  for (let k = 1; k <= list.length; k++) {
+    const j = (tm.idx + k) % list.length;
+    if (list[j].state === 'alive') { tm.idx = j; S.active = list[j]; break; }
+  }
+  S.wind = Math.round(rnd(-1, 1) * 10) / 10;
+  S.timer = 30 * 60; S.stamina = 160; S.weapon = 'bazooka'; S.power = 0; S.charging = false;
+  S.aim = S.active.face > 0 ? -0.6 : -Math.PI + 0.6;
+  S.state = isCPU(S.cur) ? 'cpu' : 'aim';
+  S.cpu = S.state === 'cpu' ? { t: 0, plan: null } : null;
+  S.msg = `${TEAM[S.cur].name}: ходит ${S.active.name}`; S.msgT = 110;
+  updateUI();
+}
+
+function endTurn() {
+  if (S.state !== 'aim' && S.state !== 'cpu') return;
+  S.state = 'resolve'; S.settle = 0; S.resolveT = 0; S.charging = false; S.power = 0;
+  updateUI();
+}
+
+function endGame(winner) {
+  S.over = true; S.state = 'over'; updateUI();
+  const t = document.getElementById('overTitle'), p = document.getElementById('overText');
+  if (winner < 0) { t.textContent = 'Ничья'; p.textContent = 'Обе армии полегли. Ферма опустела.'; }
+  else {
+    const left = aliveOf(winner).map(p => p.name).join(', ');
+    t.textContent = `Победили ${TEAM[winner].name}`;
+    p.textContent = `В строю остались: ${left}.`;
+    if (S.mode === 'cpu') p.textContent += winner === 0 ? ' Компьютер разбит.' : ' Компьютер оказался хитрее. Реванш?';
+  }
+  setTimeout(() => { document.getElementById('over').hidden = false; }, 900);
+}
+
+/* ---------- физика свиней ---------- */
+function hurt(p, d) {
+  if (d <= 0 || p.state !== 'alive') return;
+  p.hp = Math.max(0, p.hp - d);
+  S.texts.push({ x: p.x, y: p.y - 36, txt: '−' + d, col: TEAM[p.team].col, t: 70 });
+  oink();
+}
+function land(p) {
+  const sp = p.vy;
+  let k = 0; while (solid(p.x, p.y) && k++ < 30) p.y--;
+  p.vy = 0; p.vx = 0; p.ground = true;
+  if (sp > 6.5) {
+    hurt(p, Math.round((sp - 6.5) * 8));
+    if (p === S.active) endTurn();
+  }
+}
+function drown(p) {
+  p.state = 'gone';
+  for (let i = 0; i < 18; i++) S.parts.push({ x: p.x, y: WATER, vx: rnd(-2, 2), vy: rnd(-5, -1), life: 40, max: 40, col: '#CFE3E6', size: rnd(2, 4), grav: true });
+  S.texts.push({ x: p.x, y: WATER - 30, txt: 'Буль!', col: '#EFE5C8', t: 80 });
+  splashSnd();
+  if (p === S.active) endTurn();
+}
+function updPig(p) {
+  if (p.state === 'gone') return;
+  if (!p.ground) {
+    p.vy = Math.min(12, p.vy + G);
+    const steps = Math.ceil(Math.max(Math.abs(p.vx), Math.abs(p.vy)) * 2) || 1;
+    for (let s = 0; s < steps; s++) {
+      const nx = p.x + p.vx / steps, ny = p.y + p.vy / steps;
+      if (solid(nx, p.y - 6) || solid(nx, p.y - 16)) p.vx *= -0.3; else p.x = nx;
+      if (p.vy < 0 && solid(p.x, ny - 20)) p.vy = 0;
+      else if (p.vy > 0 && solid(p.x, ny)) { land(p); break; }
+      else p.y = ny;
+    }
+  } else if (!solid(p.x, p.y + 1)) {
+    let k = 0; while (k < 4 && !solid(p.x, p.y + 1)) { p.y++; k++; }
+    if (!solid(p.x, p.y + 1)) { p.ground = false; }
+  }
+  if (p.y > WATER + 6) drown(p);
+}
+function walk(p, dir) {
+  if (p.face !== dir) { p.face = dir; S.aim = Math.atan2(Math.sin(S.aim), -Math.cos(S.aim)); }
+  if (S.stamina <= 0 || !p.ground) return;
+  const nx = p.x + dir * 1.1;
+  for (let st = 0; st <= 6; st++) {
+    if (!solid(nx, p.y - st) && !solid(nx, p.y - st - 14)) { p.x = nx; p.y -= st; S.stamina -= 1; return; }
+  }
+}
+function jump(p) {
+  if (!p.ground || S.stamina < 15) return;
+  p.vy = -5; p.vx = p.face * 2.4; p.ground = false; S.stamina -= 15;
+  tone(300, 600, 0.1, 'triangle', 0.05);
+}
+
+/* ---------- взрывы и снаряды ---------- */
+function explode(x, y, r, dmg) {
+  const r2 = r * r;
+  for (let dy = -r; dy <= r; dy++) {
+    const yy = (y + dy) | 0; if (yy < 0 || yy >= H) continue;
+    const w = Math.sqrt(r2 - dy * dy) | 0;
+    for (let dx = -w; dx <= w; dx++) { const xx = (x + dx) | 0; if (xx >= 0 && xx < W) mask[yy * W + xx] = 0; }
+  }
+  tctx.save();
+  tctx.globalCompositeOperation = 'destination-out';
+  tctx.beginPath(); tctx.arc(x, y, r, 0, Math.PI * 2); tctx.fill();
+  tctx.globalCompositeOperation = 'source-atop';
+  tctx.strokeStyle = 'rgba(38,24,12,.7)'; tctx.lineWidth = 6;
+  tctx.beginPath(); tctx.arc(x, y, r + 2, 0, Math.PI * 2); tctx.stroke();
+  tctx.restore();
+
+  for (const p of S.pigs) {
+    if (p.state === 'gone') continue;
+    const dx = p.x - x, dy = p.y - 10 - y, d = Math.hypot(dx, dy) || 1;
+    if (d < r + 12) {
+      const f = 1 - d / (r + 12);
+      if (p.state === 'alive') hurt(p, Math.round(dmg * f));
+      p.vx += (dx / d) * f * 7; p.vy += (dy / d) * f * 7 - 2.5 * f; p.ground = false;
+    }
+  }
+  for (let i = 0; i < r * 0.9; i++) {
+    const a = rnd(0, Math.PI * 2), s = rnd(1, 5);
+    S.parts.push({ x, y, vx: Math.cos(a) * s, vy: Math.sin(a) * s, life: rnd(18, 34), max: 34, col: i % 3 ? '#F2A13A' : '#FFE08A', size: rnd(3, 7), grav: false, fire: true });
+  }
+  for (let i = 0; i < r * 0.5; i++) {
+    const a = rnd(Math.PI, Math.PI * 2), s = rnd(2, 6);
+    S.parts.push({ x, y, vx: Math.cos(a) * s, vy: Math.sin(a) * s, life: rnd(40, 70), max: 70, col: '#6B4A2B', size: rnd(2, 4), grav: true });
+  }
+  for (let i = 0; i < 6; i++) S.parts.push({ x: x + rnd(-r / 2, r / 2), y: y + rnd(-r / 2, r / 2), vx: rnd(-0.4, 0.4), vy: rnd(-1, -0.3), life: 80, max: 80, col: '#5b554c', size: r * rnd(0.4, 0.7), grav: false, smoke: true });
+  S.shake = Math.min(14, r * 0.3);
+  boom(r);
+}
+
+function fire() {
+  const p = S.active, w = WEAPONS[S.weapon];
+  const cx = p.x + Math.cos(S.aim) * 16, cy = p.y - 12 + Math.sin(S.aim) * 16;
+  if (S.weapon === 'bazooka' || S.weapon === 'grenade') {
+    const sp = w.speed * Math.max(0.12, S.power);
+    S.proj.push({ type: S.weapon, x: cx, y: cy, vx: Math.cos(S.aim) * sp, vy: Math.sin(S.aim) * sp, fuse: w.fuse || 0, t: 0 });
+    tone(200, 80, 0.2, 'square', 0.07);
+  } else if (S.weapon === 'shotgun') {
+    let x = cx, y = cy, hit = false;
+    for (let d = 0; d < 520 && !hit; d += 2) {
+      x += Math.cos(S.aim) * 2; y += Math.sin(S.aim) * 2;
+      if (solid(x, y) || y > WATER) hit = true;
+      for (const q of S.pigs) if (q !== p && q.state === 'alive' && Math.hypot(q.x - x, q.y - 10 - y) < R + 2) hit = true;
+    }
+    S.tracers.push({ x1: cx, y1: cy, x2: x, y2: y, t: 12 });
+    tone(1200, 60, 0.15, 'sawtooth', 0.09);
+    if (hit && y <= WATER) explode(x, y, w.r, w.dmg);
+  } else if (S.weapon === 'airstrike') {
+    const tx = S.target ?? p.x;
+    S.teams[S.cur].ammo.airstrike--;
+    for (let i = -2; i <= 2; i++) S.proj.push({ type: 'bomb', x: tx + i * 34, y: -30 - Math.abs(i) * 22, vx: 0, vy: 2, t: 0 });
+    const dir = S.wind >= 0 ? 1 : -1;
+    S.plane = { x: dir > 0 ? -120 : W + 120, y: 46, dir };
+    tone(120, 90, 0.8, 'sawtooth', 0.04);
+  }
+  S.power = 0; S.charging = false; S.target = null;
+  S.state = 'resolve'; S.settle = 0; S.resolveT = 0;
+  updateUI();
+}
+
+function updProj() {
+  for (let i = S.proj.length - 1; i >= 0; i--) {
+    const pr = S.proj[i];
+    pr.t++;
+    if (pr.type !== 'grenade') pr.vx += S.wind * 0.035;
+    pr.vy += G;
+    let dead = false;
+    const steps = Math.ceil(Math.max(Math.abs(pr.vx), Math.abs(pr.vy))) || 1;
+    for (let s = 0; s < steps && !dead; s++) {
+      pr.x += pr.vx / steps; pr.y += pr.vy / steps;
+      if (pr.x < -300 || pr.x > W + 300 || pr.y > H + 40) { dead = true; break; }
+      if (pr.y > WATER) {
+        for (let k = 0; k < 10; k++) S.parts.push({ x: pr.x, y: WATER, vx: rnd(-1.5, 1.5), vy: rnd(-4, -1), life: 35, max: 35, col: '#CFE3E6', size: rnd(2, 3), grav: true });
+        splashSnd(); dead = true; break;
+      }
+      const hitPig = pr.type !== 'grenade' && S.pigs.some(q => q.state === 'alive' && (q !== S.active || pr.t > 10) && Math.hypot(q.x - pr.x, q.y - 10 - pr.y) < R + 3);
+      if (solid(pr.x, pr.y) || hitPig) {
+        if (pr.type === 'grenade') {
+          pr.x -= pr.vx / steps; pr.y -= pr.vy / steps;
+          let nx = 0, ny = 0;
+          for (let a = 0; a < 16; a++) { const c = Math.cos(a / 16 * Math.PI * 2), sn = Math.sin(a / 16 * Math.PI * 2); if (solid(pr.x + c * 5, pr.y + sn * 5)) { nx -= c; ny -= sn; } }
+          const l = Math.hypot(nx, ny); if (l) { nx /= l; ny /= l; } else { ny = -1; }
+          const dot = pr.vx * nx + pr.vy * ny;
+          if (dot < 0) { pr.vx -= 2 * dot * nx; pr.vy -= 2 * dot * ny; }
+          pr.vx *= 0.55; pr.vy *= 0.55;
+          if (Math.abs(dot) > 1.5) tone(700, 500, 0.04, 'triangle', 0.04);
+          break;
+        }
+        const w = pr.type === 'bomb' ? WEAPONS.airstrike : WEAPONS.bazooka;
+        explode(pr.x, pr.y, w.r, w.dmg); dead = true;
+      }
+    }
+    if (!dead && pr.type === 'grenade' && --pr.fuse <= 0) { explode(pr.x, pr.y, WEAPONS.grenade.r, WEAPONS.grenade.dmg); dead = true; }
+    if (!dead && pr.type === 'bazooka' && pr.t % 2 === 0) S.parts.push({ x: pr.x, y: pr.y, vx: 0, vy: -0.2, life: 30, max: 30, col: '#d8d2c4', size: 3, grav: false, smoke: true });
+    if (dead) S.proj.splice(i, 1);
+  }
+}
+
+/* ---------- компьютер ---------- */
+function simulate(x, y, vx, vy, me) {
+  for (let t = 0; t < 400; t++) {
+    vx += S.wind * 0.035; vy += G;
+    for (let s = 0; s < 2; s++) {
+      x += vx / 2; y += vy / 2;
+      if (y > WATER || x < -60 || x > W + 60) return null;
+      if (solid(x, y)) return { x, y };
+      for (const q of S.pigs) if (q.state === 'alive' && (q !== me || t > 5) && Math.hypot(q.x - x, q.y - 10 - y) < R + 3) return { x, y };
+    }
+  }
+  return null;
+}
+function scoreHit(hit, me, r, dmg) {
+  let sc = 0;
+  for (const q of S.pigs) {
+    if (q.state !== 'alive') continue;
+    const d = Math.hypot(q.x - hit.x, q.y - 10 - hit.y);
+    if (d < r + 12) {
+      const v = dmg * (1 - d / (r + 12));
+      sc += q.team === me.team ? -v * 1.4 : v + (q.hp <= v ? 30 : 0);
+    }
+  }
+  return sc;
+}
+function planShot() {
+  const me = S.active, enemies = aliveOf(1 - me.team);
+  const ox = me.x, oy = me.y - 12;
+  let best = { score: -1e9, aim: -Math.PI / 2, power: 0.5, weapon: 'bazooka' };
+  for (let a = -Math.PI - 0.3; a <= 0.3; a += 0.035) {
+    for (let pw = 0.25; pw <= 1.001; pw += 0.05) {
+      const sp = WEAPONS.bazooka.speed * pw;
+      const hit = simulate(ox + Math.cos(a) * 16, oy + Math.sin(a) * 16, Math.cos(a) * sp, Math.sin(a) * sp, me);
+      if (!hit) continue;
+      let sc = scoreHit(hit, me, WEAPONS.bazooka.r, WEAPONS.bazooka.dmg);
+      if (sc <= 0) sc = Math.min(sc, 0) - Math.min(...enemies.map(e => Math.hypot(e.x - hit.x, e.y - hit.y))) * 0.05;
+      if (sc > best.score) best = { score: sc, aim: a, power: pw, weapon: 'bazooka' };
+    }
+  }
+  if (S.teams[me.team].ammo.airstrike > 0 && best.score < 15 && enemies.length) {
+    const e = enemies.reduce((a, b) => (a.hp < b.hp ? a : b));
+    const tx = e.x - 59 * S.wind;
+    if (Math.abs(tx - me.x) > 110) best = { weapon: 'airstrike', tx: tx + rnd(-12, 12) * S.diff, aim: -Math.PI / 2, power: 0 };
+  }
+  if (best.weapon === 'bazooka') {
+    best.aim += rnd(-0.5, 0.5) * 0.09 * S.diff;
+    best.power = clamp(best.power + rnd(-0.5, 0.5) * 0.07 * S.diff, 0.15, 1);
+  }
+  return best;
+}
+function cpuTick() {
+  const c = S.cpu; c.t++;
+  if (c.t === 45) { c.plan = planShot(); S.weapon = c.plan.weapon; updateUI(); }
+  if (c.t > 45 && c.t < 95 && c.plan) {
+    let d = c.plan.aim - S.aim; d = Math.atan2(Math.sin(d), Math.cos(d));
+    S.aim += d * 0.12; S.active.face = Math.cos(S.aim) >= 0 ? 1 : -1;
+  }
+  if (c.t === 95) {
+    S.aim = c.plan.aim;
+    if (c.plan.weapon === 'airstrike') { S.target = c.plan.tx; fire(); }
+    else { S.charging = true; S.power = 0; }
+  }
+}
+
+/* ---------- главный цикл ---------- */
+function settled() {
+  return S.proj.length === 0 && S.pigs.every(p => p.state === 'gone' || p.ground);
+}
+function update() {
+  S.tick++;
+  for (const c of clouds) { c.x += 0.08 + S.wind * 0.35; if (c.x > W + 150) c.x = -150; if (c.x < -150) c.x = W + 150; }
+  const p = S.active, playing = !S.paused && !S.over;
+  if (playing && S.state === 'aim') {
+    if (keys.left) walk(p, -1);
+    if (keys.right) walk(p, 1);
+    const up = p.face > 0 ? -1 : 1;
+    if (keys.up) S.aim += up * 0.025;
+    if (keys.down) S.aim -= up * 0.025;
+  }
+  if (playing && (S.state === 'aim' || S.state === 'cpu')) { if (--S.timer <= 0) endTurn(); }
+  if (playing && S.state === 'cpu') cpuTick();
+  if (S.charging) {
+    S.power = Math.min(1, S.power + 1 / 70);
+    if (S.power >= 1 || (S.state === 'cpu' && S.power >= S.cpu.plan.power)) fire();
+  }
+  S.pigs.forEach(updPig);
+  updProj();
+  for (let i = S.parts.length - 1; i >= 0; i--) {
+    const q = S.parts[i]; q.x += q.vx; q.y += q.vy;
+    if (q.grav) q.vy += 0.2; else { q.vx *= 0.94; q.vy *= 0.94; }
+    if (q.smoke) q.x += S.wind * 0.3;
+    if (--q.life <= 0) S.parts.splice(i, 1);
+  }
+  for (let i = S.texts.length - 1; i >= 0; i--) { S.texts[i].y -= 0.5; if (--S.texts[i].t <= 0) S.texts.splice(i, 1); }
+  for (let i = S.tracers.length - 1; i >= 0; i--) if (--S.tracers[i].t <= 0) S.tracers.splice(i, 1);
+  if (S.plane) { S.plane.x += S.plane.dir * 12; if (S.plane.x < -200 || S.plane.x > W + 200) S.plane = null; }
+  if (S.state === 'resolve' && !S.over) {
+    S.resolveT++;
+    if (settled() || S.resolveT > 1200) {
+      S.settle++;
+      if (S.settle === 25) {
+        for (const q of S.pigs) if (q.state === 'alive' && q.hp <= 0) {
+          q.state = 'grave';
+          S.texts.push({ x: q.x, y: q.y - 30, txt: 'Хрю… прощай', col: '#EFE5C8', t: 90 });
+          for (let k = 0; k < 10; k++) S.parts.push({ x: q.x, y: q.y - 10, vx: rnd(-1, 1), vy: rnd(-1.5, -0.2), life: 60, max: 60, col: '#7a7266', size: rnd(4, 8), grav: false, smoke: true });
+        }
+      }
+      if (S.settle >= 70) nextTurn();
+    } else S.settle = 0;
+  }
+  S.shake *= 0.86;
+  if (S.msgT > 0) S.msgT--;
+  if (S.tick % 5 === 0) document.getElementById('stamBar').style.width = (S.state === 'aim' ? clamp(S.stamina / 160, 0, 1) * 100 : 0) + '%';
+}
+
+/* ---------- отрисовка ---------- */
+function drawPig(p) {
+  const col = TEAM[p.team];
+  if (p.state === 'grave') {
+    ctx.save(); ctx.translate(p.x, p.y);
+    ctx.fillStyle = '#8d877c'; ctx.strokeStyle = '#3a342c'; ctx.lineWidth = 1.5;
+    ctx.beginPath(); ctx.moveTo(-8, 0); ctx.lineTo(-8, -16); ctx.arc(0, -16, 8, Math.PI, 0); ctx.lineTo(8, 0); ctx.closePath(); ctx.fill(); ctx.stroke();
+    ctx.fillStyle = col.dark; ctx.fillRect(-1.5, -20, 3, 12); ctx.fillRect(-5, -16, 10, 3);
+    ctx.restore(); return;
+  }
+  const bob = p === S.active && S.state === 'aim' ? Math.sin(S.tick * 0.15) * 0.6 : 0;
+  ctx.save(); ctx.translate(p.x, p.y + bob); ctx.scale(p.face, 1);
+  ctx.fillStyle = '#C97A83';
+  for (const lx of [-8, -3, 4, 8]) ctx.fillRect(lx - 1.5, -5, 3, 5);
+  ctx.strokeStyle = '#B8616A'; ctx.lineWidth = 1.5;
+  ctx.beginPath(); ctx.arc(-13, -12, 3, 0.5, 5.5); ctx.stroke();
+  ctx.fillStyle = '#F2A3A8'; ctx.strokeStyle = '#A9555E';
+  ctx.beginPath(); ctx.ellipse(0, -11, 12, 8, 0, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+  ctx.beginPath(); ctx.arc(9, -16, 7, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+  ctx.fillStyle = '#E7838C'; ctx.beginPath(); ctx.ellipse(15.5, -15, 3, 3.4, 0, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+  ctx.fillStyle = '#6b2b31'; ctx.fillRect(14.6, -16.5, 1, 1.6); ctx.fillRect(16.3, -16.5, 1, 1.6);
+  ctx.fillStyle = '#1b120c'; ctx.beginPath(); ctx.arc(11, -18, 1.4, 0, Math.PI * 2); ctx.fill();
+  // каска
+  ctx.fillStyle = col.col; ctx.strokeStyle = col.dark; ctx.lineWidth = 1.5;
+  ctx.beginPath(); ctx.arc(8, -19, 7.5, Math.PI, 0); ctx.closePath(); ctx.fill(); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(-1, -19); ctx.lineTo(17, -19); ctx.lineWidth = 2.5; ctx.stroke();
+  ctx.restore();
+  if (p === S.active && (S.state === 'aim' || S.state === 'cpu') && S.weapon !== 'airstrike') {
+    ctx.save(); ctx.translate(p.x, p.y - 12); ctx.rotate(S.aim);
+    ctx.fillStyle = '#3b3a2a'; ctx.fillRect(2, -2.5, S.weapon === 'grenade' ? 8 : 20, 5);
+    if (S.weapon === 'grenade') { ctx.fillStyle = '#4E5B31'; ctx.beginPath(); ctx.arc(12, 0, 4, 0, Math.PI * 2); ctx.fill(); }
+    ctx.restore();
+  }
+}
+function drawLabels() {
+  ctx.textAlign = 'center';
+  for (const p of S.pigs) {
+    if (p.state !== 'alive') continue;
+    const col = TEAM[p.team];
+    ctx.font = '500 12px Rubik, system-ui, sans-serif';
+    const y = p.y - 38;
+    const tw = Math.max(ctx.measureText(p.name).width, 26) + 10;
+    ctx.fillStyle = 'rgba(36,26,17,.72)'; ctx.fillRect(p.x - tw / 2, y - 12, tw, 28);
+    ctx.fillStyle = '#EFE5C8'; ctx.fillText(p.name, p.x, y);
+    ctx.fillStyle = col.col; ctx.font = '700 12px Rubik, system-ui, sans-serif'; ctx.fillText(p.hp, p.x, y + 13);
+    if (p === S.active && !S.over && (S.state === 'aim' || S.state === 'cpu')) {
+      const ay = y - 22 + Math.sin(S.tick * 0.12) * 4;
+      ctx.fillStyle = '#FFE08A'; ctx.strokeStyle = '#241a11'; ctx.lineWidth = 2;
+      ctx.beginPath(); ctx.moveTo(p.x - 7, ay - 8); ctx.lineTo(p.x + 7, ay - 8); ctx.lineTo(p.x, ay); ctx.closePath(); ctx.fill(); ctx.stroke();
+    }
+  }
+}
+function drawAim() {
+  const p = S.active;
+  if (S.over || S.paused || !p || !(S.state === 'aim' || S.state === 'cpu')) return;
+  if (S.weapon === 'airstrike') {
+    const tx = S.state === 'cpu' ? (S.cpu.plan?.tx ?? null) : S.ptr?.x;
+    if (tx == null) return;
+    ctx.strokeStyle = 'rgba(200,66,59,.8)'; ctx.setLineDash([6, 6]); ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.moveTo(tx, 0); ctx.lineTo(tx, H); ctx.stroke(); ctx.setLineDash([]);
+    return;
+  }
+  const cx = p.x + Math.cos(S.aim) * 70, cy = p.y - 12 + Math.sin(S.aim) * 70;
+  ctx.strokeStyle = '#C8423B'; ctx.lineWidth = 2;
+  ctx.beginPath(); ctx.arc(cx, cy, 8, 0, Math.PI * 2); ctx.moveTo(cx - 12, cy); ctx.lineTo(cx + 12, cy); ctx.moveTo(cx, cy - 12); ctx.lineTo(cx, cy + 12); ctx.stroke();
+  if (S.charging) {
+    const n = Math.round(S.power * 12);
+    for (let i = 0; i < n; i++) {
+      const d = 22 + i * 7, t = i / 12;
+      ctx.fillStyle = `hsl(${50 - t * 50},90%,${55 - t * 10}%)`;
+      ctx.beginPath(); ctx.arc(p.x + Math.cos(S.aim) * d, p.y - 12 + Math.sin(S.aim) * d, 2 + t * 4, 0, Math.PI * 2); ctx.fill();
+    }
+  }
+}
+function drawProj() {
+  for (const pr of S.proj) {
+    ctx.save(); ctx.translate(pr.x, pr.y);
+    if (pr.type === 'grenade') {
+      ctx.fillStyle = '#4E5B31'; ctx.strokeStyle = '#1f2412'; ctx.lineWidth = 1.5;
+      ctx.beginPath(); ctx.arc(0, 0, 5, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+      ctx.fillStyle = '#EFE5C8'; ctx.font = '700 11px Rubik, sans-serif'; ctx.textAlign = 'center';
+      ctx.fillText(Math.ceil(pr.fuse / 60), 0, -10);
+    } else {
+      ctx.rotate(Math.atan2(pr.vy, pr.vx));
+      ctx.fillStyle = pr.type === 'bomb' ? '#2d2d28' : '#5c5a44';
+      ctx.beginPath(); ctx.ellipse(0, 0, 8, 3.5, 0, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = '#C8423B'; ctx.fillRect(-9, -3, 3, 6);
+    }
+    ctx.restore();
+  }
+}
+function drawPlane() {
+  const pl = S.plane; if (!pl) return;
+  ctx.save(); ctx.translate(pl.x, pl.y); ctx.scale(pl.dir, 1);
+  ctx.fillStyle = '#4a4636';
+  ctx.fillRect(-30, -3, 56, 8); ctx.fillRect(-8, -14, 12, 30); ctx.fillRect(-32, -10, 6, 12);
+  ctx.fillStyle = '#C8423B'; ctx.beginPath(); ctx.arc(-2, 1, 3, 0, Math.PI * 2); ctx.fill();
+  ctx.restore();
+}
+function drawWater() {
+  ctx.fillStyle = 'rgba(52,80,84,.9)';
+  ctx.beginPath(); ctx.moveTo(0, H);
+  for (let x = 0; x <= W; x += 8) ctx.lineTo(x, WATER + Math.sin(x * 0.03 + S.tick * 0.05) * 3);
+  ctx.lineTo(W, H); ctx.fill();
+  ctx.strokeStyle = 'rgba(207,227,230,.5)'; ctx.lineWidth = 2; ctx.beginPath();
+  for (let x = 0; x <= W; x += 8) ctx.lineTo(x, WATER + Math.sin(x * 0.03 + S.tick * 0.05) * 3);
+  ctx.stroke();
+}
+function drawHud() {
+  // отряды
+  for (let t = 0; t < 2; t++) {
+    const x = 16, y = 16 + t * 30, total = S.pigs.filter(p => p.team === t && p.state === 'alive').reduce((a, p) => a + p.hp, 0);
+    ctx.fillStyle = 'rgba(36,26,17,.75)'; ctx.fillRect(x, y, 250, 24);
+    ctx.fillStyle = TEAM[t].col; ctx.fillRect(x + 94, y + 7, 148 * total / (S.per * 100), 10);
+    ctx.fillStyle = '#EFE5C8'; ctx.font = '500 13px Rubik, sans-serif'; ctx.textAlign = 'left';
+    ctx.fillText(TEAM[t].name + (isCPU(t) ? ' (ИИ)' : ''), x + 8, y + 17);
+    if (S.cur === t && !S.over) { ctx.fillStyle = '#FFE08A'; ctx.fillRect(x, y, 3, 24); }
+  }
+  // таймер
+  if (!S.over && (S.state === 'aim' || S.state === 'cpu')) {
+    const s = Math.ceil(S.timer / 60);
+    ctx.fillStyle = 'rgba(36,26,17,.75)'; ctx.beginPath(); ctx.arc(W / 2, 36, 24, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = s <= 5 ? '#F2A13A' : '#EFE5C8'; ctx.font = '400 22px "Russo One", Impact, sans-serif'; ctx.textAlign = 'center';
+    ctx.fillText(s, W / 2, 44);
+  }
+  // ветер
+  const wx = W - 176, wy = 16;
+  ctx.fillStyle = 'rgba(36,26,17,.75)'; ctx.fillRect(wx, wy, 160, 40);
+  ctx.fillStyle = '#B5A47F'; ctx.font = '500 11px Rubik, sans-serif'; ctx.textAlign = 'left';
+  ctx.fillText('ВЕТЕР', wx + 8, wy + 14);
+  ctx.fillStyle = '#1a130c'; ctx.fillRect(wx + 10, wy + 22, 140, 8);
+  const len = S.wind * 70;
+  ctx.fillStyle = '#8FC1D4'; ctx.fillRect(wx + 80 + Math.min(0, len), wy + 22, Math.abs(len), 8);
+  ctx.fillStyle = '#EFE5C8'; ctx.fillRect(wx + 79, wy + 19, 2, 14);
+  // сообщение
+  if (S.msgT > 0 && !S.paused) {
+    ctx.globalAlpha = Math.min(1, S.msgT / 20);
+    ctx.font = '400 26px "Russo One", Impact, sans-serif'; ctx.textAlign = 'center';
+    const tw = ctx.measureText(S.msg).width + 36;
+    ctx.fillStyle = 'rgba(36,26,17,.8)'; ctx.fillRect(W / 2 - tw / 2, 84, tw, 44);
+    ctx.fillStyle = TEAM[S.cur].col === '#C8423B' ? '#F0A39A' : '#A9C6EC'; ctx.fillText(S.msg, W / 2, 115);
+    ctx.globalAlpha = 1;
+  }
+}
+function draw() {
+  ctx.save();
+  if (S.shake > 0.3) ctx.translate(rnd(-S.shake, S.shake), rnd(-S.shake, S.shake));
+  ctx.drawImage(bg, 0, 0);
+  ctx.fillStyle = 'rgba(255,255,255,.55)';
+  for (const c of clouds) {
+    ctx.beginPath();
+    ctx.arc(c.x, c.y, 22 * c.s, 0, Math.PI * 2); ctx.arc(c.x + 24 * c.s, c.y - 8 * c.s, 26 * c.s, 0, Math.PI * 2); ctx.arc(c.x + 52 * c.s, c.y, 20 * c.s, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  ctx.drawImage(terr, 0, 0);
+  S.pigs.forEach(p => p.state !== 'gone' && drawPig(p));
+  drawProj();
+  for (const tr of S.tracers) { ctx.strokeStyle = `rgba(255,224,138,${tr.t / 12})`; ctx.lineWidth = 2; ctx.beginPath(); ctx.moveTo(tr.x1, tr.y1); ctx.lineTo(tr.x2, tr.y2); ctx.stroke(); }
+  for (const q of S.parts) {
+    const a = q.life / q.max;
+    ctx.globalAlpha = q.smoke ? a * 0.5 : Math.min(1, a * 1.5);
+    ctx.fillStyle = q.fire && a < 0.5 ? '#8a4b2a' : q.col;
+    ctx.beginPath(); ctx.arc(q.x, q.y, q.smoke ? q.size * (1.6 - a) : q.size * (q.fire ? a + 0.3 : 1), 0, Math.PI * 2); ctx.fill();
+  }
+  ctx.globalAlpha = 1;
+  drawWater();
+  drawPlane();
+  drawAim();
+  drawLabels();
+  ctx.textAlign = 'center'; ctx.font = '700 16px Rubik, sans-serif';
+  for (const t of S.texts) { ctx.globalAlpha = Math.min(1, t.t / 20); ctx.fillStyle = '#241a11'; ctx.fillText(t.txt, t.x + 1, t.y + 1); ctx.fillStyle = t.col; ctx.fillText(t.txt, t.x, t.y); }
+  ctx.globalAlpha = 1;
+  ctx.restore();
+  drawHud();
+}
+
+let last = performance.now(), acc = 0;
+function frame(now) {
+  acc += Math.min(100, now - last); last = now;
+  while (acc >= 1000 / 60) { update(); acc -= 1000 / 60; }
+  draw();
+  requestAnimationFrame(frame);
+}
+
+/* ---------- интерфейс ---------- */
+const weaponsEl = document.getElementById('weapons');
+for (const [k, w] of Object.entries(WEAPONS)) {
+  const b = document.createElement('button');
+  b.className = 'btn'; b.type = 'button'; b.id = 'w-' + k; b.dataset.w = k;
+  b.addEventListener('click', () => selectWeapon(k));
+  weaponsEl.appendChild(b);
+}
+function humanTurn() { return S && !S.paused && !S.over && S.state === 'aim'; }
+function selectWeapon(k) {
+  if (!humanTurn() || S.charging) return;
+  if (k === 'airstrike' && S.teams[S.cur].ammo.airstrike <= 0) return;
+  S.weapon = k; updateUI();
+}
+function updateUI() {
+  const can = humanTurn();
+  for (const [k, w] of Object.entries(WEAPONS)) {
+    const b = document.getElementById('w-' + k);
+    const ammo = k === 'airstrike' && S ? S.teams[S.cur].ammo.airstrike : null;
+    b.innerHTML = `${w.name}${ammo !== null ? ' ×' + ammo : ''} <kbd>${w.key}</kbd>`;
+    b.classList.toggle('on', !!S && S.weapon === k);
+    b.disabled = !can || (ammo !== null && ammo <= 0);
+  }
+  for (const id of ['bLeft', 'bRight', 'bJump', 'bEnd']) document.getElementById(id).disabled = !can;
+}
+function toWorld(e) {
+  const r = cv.getBoundingClientRect();
+  return { x: (e.clientX - r.left) / r.width * W, y: (e.clientY - r.top) / r.height * H };
+}
+function aimAt(pt) {
+  S.ptr = pt;
+  if (!humanTurn() || S.weapon === 'airstrike') return;
+  const p = S.active;
+  S.aim = Math.atan2(pt.y - (p.y - 12), pt.x - p.x);
+  p.face = Math.cos(S.aim) >= 0 ? 1 : -1;
+}
+function trigger() {
+  if (!humanTurn()) return;
+  const w = WEAPONS[S.weapon];
+  if (w.charge) { S.charging = true; S.power = 0; }
+  else if (S.weapon === 'airstrike') { if (S.ptr) { S.target = S.ptr.x; fire(); } }
+  else fire();
+}
+cv.addEventListener('pointermove', e => aimAt(toWorld(e)));
+cv.addEventListener('pointerdown', e => {
+  audioInit(); aimAt(toWorld(e));
+  if (!humanTurn()) return;
+  cv.setPointerCapture?.(e.pointerId);
+  trigger();
+});
+window.addEventListener('pointerup', () => { if (S && S.charging && S.state === 'aim') fire(); });
+window.addEventListener('pointercancel', () => { if (S && S.charging && S.state === 'aim') fire(); });
+
+const KEYMAP = { ArrowLeft: 'left', KeyA: 'left', ArrowRight: 'right', KeyD: 'right', ArrowUp: 'up', KeyW: 'up', ArrowDown: 'down', KeyS: 'down' };
+window.addEventListener('keydown', e => {
+  if (!S || S.paused || S.over) return;
+  if (KEYMAP[e.code]) { keys[KEYMAP[e.code]] = true; e.preventDefault(); }
+  if (e.code === 'Space') { e.preventDefault(); if (!e.repeat) { audioInit(); trigger(); } }
+  if (e.code === 'Enter' && humanTurn()) { e.preventDefault(); jump(S.active); }
+  const wk = Object.keys(WEAPONS).find(k => WEAPONS[k].key === e.key);
+  if (wk) selectWeapon(wk);
+});
+window.addEventListener('keyup', e => {
+  if (KEYMAP[e.code]) keys[KEYMAP[e.code]] = false;
+  if (e.code === 'Space' && S && S.charging && S.state === 'aim') fire();
+});
+window.addEventListener('blur', () => { for (const k in keys) keys[k] = false; });
+
+function hold(id, key) {
+  const b = document.getElementById(id);
+  b.addEventListener('pointerdown', e => { e.preventDefault(); keys[key] = true; });
+  for (const ev of ['pointerup', 'pointerleave', 'pointercancel']) b.addEventListener(ev, () => { keys[key] = false; });
+}
+hold('bLeft', 'left'); hold('bRight', 'right');
+document.getElementById('bJump').addEventListener('click', () => humanTurn() && jump(S.active));
+document.getElementById('bEnd').addEventListener('click', () => humanTurn() && endTurn());
+document.getElementById('bSound').addEventListener('click', e => { muted = !muted; e.currentTarget.textContent = 'Звук: ' + (muted ? 'выкл' : 'вкл'); });
+
+function readOpts() {
+  const f = document.getElementById('menuForm');
+  return { mode: f.mode.value, per: +f.per.value, diff: +f.diff.value };
+}
+document.getElementById('menuForm').addEventListener('submit', e => {
+  e.preventDefault(); audioInit();
+  document.getElementById('menu').hidden = true;
+  newGame(readOpts(), false);
+});
+document.getElementById('againBtn').addEventListener('click', () => {
+  document.getElementById('over').hidden = true;
+  document.getElementById('menu').hidden = false;
+  newGame(readOpts(), true);
+});
+
+newGame(readOpts(), true);
+requestAnimationFrame(frame);
+})();
+</script>
+</body>
+</html>
