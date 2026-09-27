@@ -2,7 +2,7 @@
 
 Пошаговая 3D-стратегия про свиные армии по мотивам Hogs of War (Infogrames, 2000). Фанатский проект, с правообладателями не связан.
 
-Игра работает в браузере и собирается в Android-приложение (APK).
+Игра работает в браузере (в том числе в Safari на iPhone) и собирается в приложения для Android (APK) и iOS (IPA).
 
 ## Как установить на Android
 
@@ -12,13 +12,22 @@
 
 APK собирается автоматически GitHub Actions при каждом изменении игры (`.github/workflows/android.yml`). Это отладочная сборка: её можно ставить напрямую, но для Google Play нужна подписанная release-сборка.
 
+## Как установить на iPhone
+
+**Способ 1 — через Safari (без компьютера и аккаунта разработчика).**
+1. Один раз включите публикацию: *Settings → Pages → Build and deployment → Source: Deploy from a branch → `gh-pages` / (root) → Save*. Ветку `gh-pages` создаёт workflow `.github/workflows/pages.yml`.
+2. Откройте на айфоне в Safari https://misterios2004-cell.github.io/-/
+3. Нажмите «Поделиться» → «На экран Домой». Игра откроется на весь экран со своей иконкой и после первого запуска работает без интернета.
+
+**Способ 2 — настоящее iOS-приложение (.ipa).** GitHub Actions собирает `svinyi-v-okopah.ipa` (`.github/workflows/ios.yml`) и кладёт его в Releases. Файл без подписи Apple: установите его через [Sideloadly](https://sideloadly.io) или [AltStore](https://altstore.io) с компьютера (Windows или Mac) под своим Apple ID. С бесплатным Apple ID приложение нужно переподписывать раз в 7 дней; с платным аккаунтом разработчика ($99 в год) — раз в год, также открывается TestFlight и App Store.
+
 ## Как запустить в браузере
 
 ```bash
 npm run serve        # или: python3 -m http.server 8080 --directory www
 ```
 
-Откройте http://localhost:8080. Для веб-версии с установкой «на главный экран» включите GitHub Pages: *Settings → Pages → Source: GitHub Actions*, после чего `.github/workflows/pages.yml` публикует папку `www` при пуше в `main`.
+Откройте http://localhost:8080. Онлайн-версия публикуется в GitHub Pages (см. раздел про iPhone).
 
 ## Что есть в игре
 
@@ -70,5 +79,6 @@ npm run serve        # или: python3 -m http.server 8080 --directory www
   - `js/models.js` — процедурные 3D-модели
   - `js/ui.js` — меню, кампания, казарма, HUD, управление
   - `vendor/` — Three.js r128 и Capacitor core (MIT)
-- `resources/` — иконки и заставка Android
-- `capacitor.config.json`, `package.json` — оболочка Android (Capacitor 6)
+- `resources/` — иконки и заставки для Android и iOS
+- `capacitor.config.json`, `package.json` — нативная оболочка Android и iOS (Capacitor 6)
+- `.github/workflows/` — сборка APK, IPA и публикация веб-версии

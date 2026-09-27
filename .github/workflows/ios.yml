@@ -1,0 +1,79 @@
+name: iOS IPA
+
+on:
+  push:
+    branches: [main, 'claude/**']
+    paths: ['www/**', 'resources/**', 'package.json', 'package-lock.json', 'capacitor.config.json', '.github/workflows/ios.yml']
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Установить зависимости
+        run: npm ci
+
+      - name: Создать iOS-проект
+        run: npx cap add ios
+
+      - name: Иконка, заставка, ориентация, версия
+        run: |
+          APP=ios/App/App
+          for f in $APP/Assets.xcassets/AppIcon.appiconset/*.png; do cp resources/ios/AppIcon-1024.png "$f"; done
+          for f in $APP/Assets.xcassets/Splash.imageset/*.png; do cp resources/ios/splash-2732.png "$f"; done
+          PL=$APP/Info.plist
+          for KEY in UISupportedInterfaceOrientations "UISupportedInterfaceOrientations~ipad"; do
+            /usr/libexec/PlistBuddy -c "Delete :$KEY" $PL || true
+            /usr/libexec/PlistBuddy -c "Add :$KEY array" $PL
+            /usr/libexec/PlistBuddy -c "Add :$KEY:0 string UIInterfaceOrientationLandscapeRight" $PL
+            /usr/libexec/PlistBuddy -c "Add :$KEY:1 string UIInterfaceOrientationLandscapeLeft" $PL
+          done
+          /usr/libexec/PlistBuddy -c "Delete :UIRequiresFullScreen" $PL || true
+          /usr/libexec/PlistBuddy -c "Add :UIRequiresFullScreen bool true" $PL
+          /usr/libexec/PlistBuddy -c "Set :CFBundleDisplayName Свиньи в окопах" $PL || /usr/libexec/PlistBuddy -c "Add :CFBundleDisplayName string Свиньи в окопах" $PL
+          sed -i '' "s/MARKETING_VERSION = [^;]*;/MARKETING_VERSION = 2.0.${{ github.run_number }};/g; s/CURRENT_PROJECT_VERSION = [^;]*;/CURRENT_PROJECT_VERSION = ${{ github.run_number }};/g" ios/App/App.xcodeproj/project.pbxproj
+          /usr/libexec/PlistBuddy -c "Print :UISupportedInterfaceOrientations" $PL
+          ls $APP/Assets.xcassets/AppIcon.appiconset $APP/Assets.xcassets/Splash.imageset
+
+      - name: Синхронизировать веб-часть
+        run: npx cap sync ios
+
+      - name: Собрать приложение (без подписи)
+        run: |
+          set -o pipefail
+          xcodebuild -workspace ios/App/App.xcworkspace -scheme App -configuration Release \
+            -sdk iphoneos -destination 'generic/platform=iOS' -archivePath build/App.xcarchive \
+            CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY="" archive | tail -40
+          test -d build/App.xcarchive/Products/Applications/App.app
+          mkdir -p Payload
+          cp -R build/App.xcarchive/Products/Applications/App.app Payload/
+          zip -qry svinyi-v-okopah.ipa Payload
+          ls -la svinyi-v-okopah.ipa
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: svinyi-v-okopah-ipa
+          path: svinyi-v-okopah.ipa
+
+      - name: Опубликовать релиз с IPA
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ipa-${{ github.run_number }}
+          name: Свиньи в окопах для iPhone — сборка ${{ github.run_number }}
+          target_commitish: ${{ github.sha }}
+          prerelease: ${{ github.ref != 'refs/heads/main' }}
+          files: svinyi-v-okopah.ipa
+          body: |
+            iOS-приложение «Свиньи в окопах», сборка ${{ github.run_number }} (коммит ${{ github.sha }}).
+            Файл не подписан: установите его через Sideloadly или AltStore со своим Apple ID (нужен компьютер).
+            С бесплатным Apple ID приложение нужно переподписывать раз в 7 дней.

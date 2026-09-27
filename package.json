@@ -6,12 +6,15 @@
   "scripts": {
     "serve": "python3 -m http.server 8080 --directory www",
     "android:add": "cap add android",
-    "android:sync": "cap sync android"
+    "android:sync": "cap sync android",
+    "ios:add": "cap add ios",
+    "ios:sync": "cap sync ios"
   },
   "dependencies": {
     "@capacitor/android": "6.2.1",
     "@capacitor/app": "6.0.3",
     "@capacitor/core": "6.2.1",
+    "@capacitor/ios": "6.2.1",
     "@capacitor/status-bar": "6.0.3"
   },
   "devDependencies": {

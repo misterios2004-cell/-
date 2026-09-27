@@ -29,8 +29,15 @@ export const UI = {
     this.startDemo();
     this.title();
     Sound.init(); // контекст будет разблокирован первым касанием
-    const unlock = () => { Sound.init(); if (!Sound.musicOn && !this.battle) Sound.startMusic('menu'); window.removeEventListener('pointerdown', unlock); window.removeEventListener('keydown', unlock); };
-    window.addEventListener('pointerdown', unlock); window.addEventListener('keydown', unlock);
+    // Safari на iPhone включает звук только внутри касания (touchend/click), поэтому слушаем все жесты,
+    // пока аудиоконтекст не запустится.
+    const evs = ['pointerdown', 'touchend', 'click', 'keydown'];
+    const unlock = () => {
+      Sound.init();
+      if (!Sound.musicOn && !this.battle) Sound.startMusic('menu');
+      if (Sound.ctx && Sound.ctx.state === 'running') evs.forEach(e => window.removeEventListener(e, unlock, true));
+    };
+    evs.forEach(e => window.addEventListener(e, unlock, true));
     // кнопка «назад» на Android
     const Cap = window.Capacitor;
     if (Cap?.isNativePlatform?.()) {
@@ -53,9 +60,12 @@ export const UI = {
   },
 
   /* ================= кадр ================= */
+  portrait() { return this.touch && innerHeight > innerWidth; },
   frame(dt) {
     const b = this.battle || this.demo;
     if (!b) return;
+    document.body.classList.toggle('inBattle', !!this.battle);
+    if (this.battle && this.portrait()) { b.render(); return; } // ждём, пока телефон повернут
     const steps = Math.min(6, Math.round(dt * 60) || 1);
     for (let i = 0; i < steps; i++) b.update(1 / 60);
     b.render();
@@ -390,6 +400,7 @@ export const UI = {
             <p>Джойстик слева — ходьба и повороты. Проведите пальцем по полю — наводка. Кнопки справа: огонь (удерживать), прыжок, бег, техника. Для авиаудара коснитесь точки на карте.</p>
           </div>
         </div>
+        <p class="note">Фанатская игра по мотивам Hogs of War (Infogrames, 2000). Не связана с правообладателями.</p>
         <div class="row"><button class="btn" data-go="title">Назад</button></div>
       </div>`);
   },

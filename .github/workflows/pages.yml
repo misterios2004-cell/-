@@ -1,15 +1,15 @@
 name: Веб-версия (GitHub Pages)
 
+# Копирует папку www в ветку gh-pages. Включите один раз:
+# Settings → Pages → Build and deployment → Source: Deploy from a branch → gh-pages / (root).
 on:
   push:
-    branches: [main]
-    paths: ['www/**']
+    branches: [main, 'claude/**']
+    paths: ['www/**', '.github/workflows/pages.yml']
   workflow_dispatch:
 
 permissions:
-  contents: read
-  pages: write
-  id-token: write
+  contents: write
 
 concurrency:
   group: pages
@@ -18,14 +18,12 @@ concurrency:
 jobs:
   deploy:
     runs-on: ubuntu-latest
-    environment:
-      name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
     steps:
       - uses: actions/checkout@v5
-      - uses: actions/configure-pages@v5
-      - uses: actions/upload-pages-artifact@v3
+      - uses: peaceiris/actions-gh-pages@v4
         with:
-          path: www
-      - id: deployment
-        uses: actions/deploy-pages@v4
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: ./www
+          publish_branch: gh-pages
+          force_orphan: true
+          commit_message: "Веб-версия из ${{ github.sha }}"
