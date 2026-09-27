@@ -1,14 +1,14 @@
 {
   "appId": "com.svinyi.okopy",
-  "appName": "Свиньи в окопах",
+  "appName": "Лисьи норы",
   "webDir": "www",
-  "backgroundColor": "#1e1710",
+  "backgroundColor": "#0e1012",
   "android": {
-    "backgroundColor": "#1e1710",
+    "backgroundColor": "#0e1012",
     "allowMixedContent": false
   },
   "ios": {
-    "backgroundColor": "#1e1710",
+    "backgroundColor": "#0e1012",
     "contentInset": "never",
     "scrollEnabled": false
   }

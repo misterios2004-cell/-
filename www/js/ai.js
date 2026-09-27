@@ -2,6 +2,7 @@
 import { THREE, clamp, angDiff, rnd } from './core.js';
 import { WEAPONS } from './data.js';
 import { WATER_Y } from './world.js';
+import { FOX_BODY } from './models.js';
 
 const G = 20;
 const gauss = () => (Math.random() + Math.random() + Math.random() - 1.5) / 1.5;
@@ -75,7 +76,7 @@ export class AI {
     if (Math.abs(diff) < 0.7) {
       const run = dist > 6 && b.stamina > 10 && !h.swim;
       h.running = run; if (run) b.stamina -= 22 * dt;
-      b.moveHog(h, h.swim ? 1.9 : run ? 5.6 : 3.2, dt);
+      b.moveFox(h, h.swim ? 1.9 : run ? 5.6 : 3.2, dt);
     }
     // застряли — прыгаем, потом сдаёмся
     this.stuckT = h.pos.distanceTo(this.lastPos) < 0.02 ? this.stuckT + dt : 0;
@@ -91,7 +92,7 @@ export class AI {
     const away = h.pos.clone().sub(t.pos).setY(0); if (away.lengthSq() < 0.01) away.set(1, 0, 0);
     h.yaw += clamp(angDiff(Math.atan2(away.x, away.z), h.yaw), -4 * dt, 4 * dt);
     h.running = b.stamina > 0; b.stamina -= 22 * dt;
-    b.moveHog(h, h.running ? 5.6 : 3.2, dt);
+    b.moveFox(h, h.running ? 5.6 : 3.2, dt);
   }
 
   /* ---------- куда пойти ---------- */
@@ -100,7 +101,7 @@ export class AI {
     if (h.vehicle) return null;
     // в воде — к ближайшему берегу, предпочитая сторону противника
     if (h.swim) {
-      const foe = b.hogs.find(o => o.alive && o.team !== h.team);
+      const foe = b.foxes.find(o => o.alive && o.team !== h.team);
       let best = null, bestScore = Infinity;
       for (let r = 3; r <= 24; r += 3) for (let k = 0; k < 16; k++) {
         const a = k / 16 * Math.PI * 2, p = h.pos.clone().add(new THREE.Vector3(Math.sin(a) * r, 0, Math.cos(a) * r));
@@ -110,7 +111,7 @@ export class AI {
       }
       if (best) return { pos: best };
     }
-    const enemies = b.hogs.filter(o => o.alive && o.team !== h.team && !o.status.hidden);
+    const enemies = b.foxes.filter(o => o.alive && o.team !== h.team && !o.status.hidden);
     const v = b.vehicles.find(v => !v.dead && !v.occupant && v.pos.distanceTo(h.pos) < 26 && (v.nation === h.team.nation || v.pos.x * h.pos.x > 0));
     if (v) return { pos: v.pos, vehicle: v };
     const crate = b.crates.filter(c => !c.gone && !c.falling && c.pos.distanceTo(h.pos) < 16 && c.pos.y > 0).sort((a, c) => a.pos.distanceTo(h.pos) - c.pos.distanceTo(h.pos))[0];
@@ -137,10 +138,10 @@ export class AI {
     const b = this.b, h = this.h, ai = h.team.ai;
     if (h.swim && !h.vehicle) return null;
     this.buildBuckets();
-    const enemies = b.hogs.filter(o => o.alive && o.team !== h.team && !o.status.hidden);
-    const allies = b.hogs.filter(o => o.alive && o.team === h.team);
+    const enemies = b.foxes.filter(o => o.alive && o.team !== h.team && !o.status.hidden);
+    const allies = b.foxes.filter(o => o.alive && o.team === h.team);
     const cands = [];
-    const origin = h.vehicle ? h.vehicle.pos.clone().setY(h.vehicle.pos.y + (h.vehicle.type === 'tank' ? 1.9 : 1.3)) : h.pos.clone().setY(h.pos.y + 1.0 * h.scale);
+    const origin = h.vehicle ? h.vehicle.pos.clone().setY(h.vehicle.pos.y + (h.vehicle.type === 'tank' ? 1.9 : 1.3)) : h.pos.clone().setY(h.pos.y + FOX_BODY.muzzle * h.scale);
     const aimAt = (target) => { const d = target.clone().sub(origin); return { yaw: Math.atan2(d.x, d.z), pitch: Math.atan2(d.y, Math.hypot(d.x, d.z)), dist: d.length() }; };
     const direct = (w, id) => {
       for (const e of enemies) {
@@ -148,7 +149,7 @@ export class AI {
         const a = aimAt(e.center()); if (a.dist > w.range * 0.95) continue;
         const dir = new THREE.Vector3(Math.sin(a.yaw) * Math.cos(a.pitch), Math.sin(a.pitch), Math.cos(a.yaw) * Math.cos(a.pitch));
         const tr = b.traceShot(h, origin.clone().addScaledVector(dir, 0.8), dir, a.dist + 1, h.vehicle);
-        if (tr.hog !== e) continue;
+        if (tr.fox !== e) continue;
         const prob = clamp(1 - a.dist / w.range * 0.55 * Math.max(0.5, ai), 0.25, 1);
         let dmg = w.kind === 'burst' ? w.dmg * w.shots * 0.7 : w.kind === 'spread' ? w.dmg * w.pellets * clamp(1.2 - a.dist / w.range, 0.3, 1) * 0.8 : w.dmg;
         let sc = dmg * prob + (e.hp <= dmg ? 28 : 0);
@@ -186,7 +187,7 @@ export class AI {
           case 'airstrike': {
             let best = null;
             for (const e of enemies) {
-              let s = 0; for (const o of b.hogs) if (o.alive && o.pos.distanceTo(e.pos) < 6) s += (o.team === h.team ? -40 : 30 + (o.hp <= 30 ? 20 : 0));
+              let s = 0; for (const o of b.foxes) if (o.alive && o.pos.distanceTo(e.pos) < 6) s += (o.team === h.team ? -40 : 30 + (o.hp <= 30 ? 20 : 0));
               if (e.vehicle) s += 20;
               if (!best || s > best.s) best = { s, e };
             }
@@ -198,7 +199,7 @@ export class AI {
             for (const a of allies) {
               if (a === h || a.vehicle || (a.hp > a.maxHp * 0.6 && !a.status.poison)) continue;
               const t = aimAt(a.center()), dir = new THREE.Vector3(Math.sin(t.yaw) * Math.cos(t.pitch), Math.sin(t.pitch), Math.cos(t.yaw) * Math.cos(t.pitch));
-              if (b.traceShot(h, origin.clone().addScaledVector(dir, 0.8), dir, t.dist + 1).hog === a) cands.push({ score: 28 + (a.maxHp - a.hp) * 0.2, weapon: id, yaw: t.yaw, pitch: t.pitch });
+              if (b.traceShot(h, origin.clone().addScaledVector(dir, 0.8), dir, t.dist + 1).fox === a) cands.push({ score: 28 + (a.maxHp - a.hp) * 0.2, weapon: id, yaw: t.yaw, pitch: t.pitch });
             }
             break;
           case 'selfheal': if (h.hp < h.maxHp * 0.5 || h.status.poison) cands.push({ score: 38, weapon: id, yaw: h.yaw, pitch: h.pitch }); break;
@@ -264,7 +265,7 @@ export class AI {
     const p = o.clone(), v = dir.clone().multiplyScalar(w.speed * power);
     const wind = (w.wind || (veh && veh.type !== 'pillbox')) && b.cfg.wind;
     const airburst = id === 'airburst' || id === 'firerain';
-    const hogs = b.hogs.filter(x => x.alive && !x.vehicle);
+    const foxes = b.foxes.filter(x => x.alive && !x.vehicle);
     for (let t = 0; t < 6; t += dt) {
       if (wind) v.addScaledVector(b.wind, dt);
       v.y -= G * dt; p.addScaledVector(v, dt);
@@ -275,16 +276,16 @@ export class AI {
       if (p.y <= g) return p;
       const list = this.buckets.get(Math.floor(p.x / 8) * 1000 + Math.floor(p.z / 8));
       if (list) for (const c of list) if (p.y > c.y0 && p.y < c.y1 && world.inFoot(c, p.x, p.z) && !(veh && c === veh.col)) return p;
-      if (w.kind !== 'grenade' && t > 0.25) for (const x of hogs) if (x !== this.h && x.center().distanceToSquared(p) < 0.6) return p;
+      if (w.kind !== 'grenade' && t > 0.25) for (const x of foxes) if (x !== this.h && Math.abs(x.pos.x - p.x) < 0.6 && Math.abs(x.pos.z - p.z) < 0.6 && x.capsuleDist(p) < 0.05) return p;
     }
     return null;
   }
   splash(p, w, heal, gas) {
     const h = this.h, b = this.b, r = w.r + 0.8;
     let sc = 0;
-    for (const o of b.hogs) {
+    for (const o of b.foxes) {
       if (!o.alive) continue;
-      const c = o.vehicle ? o.vehicle.pos.clone().setY(o.vehicle.pos.y + 1) : o.center(), d = c.distanceTo(p);
+      const c = o.vehicle ? o.vehicle.pos.clone().setY(o.vehicle.pos.y + 1) : o.center(), d = o.vehicle ? c.distanceTo(p) : Math.max(0, o.capsuleDist(p));
       if (d >= r) continue;
       const f = 1 - d / r;
       if (heal) { const need = Math.min(w.heal, o.maxHp - o.hp); sc += o.team === h.team ? need : -need; continue; }
@@ -296,7 +297,7 @@ export class AI {
       else sc += dmg + (!o.vehicle && o.hp <= dmg ? 30 : 0);
     }
     if (!heal && !gas) for (const e of b.world.ents) if (e.kind === 'barrel' && Math.hypot(e.col.x - p.x, e.col.z - p.z) < w.r) {
-      for (const o of b.hogs) if (o.alive && Math.hypot(o.pos.x - e.col.x, o.pos.z - e.col.z) < 5) sc += o.team === h.team ? -30 : 22;
+      for (const o of b.foxes) if (o.alive && Math.hypot(o.pos.x - e.col.x, o.pos.z - e.col.z) < 5) sc += o.team === h.team ? -30 : 22;
     }
     return sc;
   }

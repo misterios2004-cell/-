@@ -1,7 +1,9 @@
-// Бой: свиньи, ходы, оружие, техника, снаряды, камера.
+// Бой: лисы-солдаты, ходы, оружие, техника, снаряды, камера.
 import { THREE, clamp, rnd, pick, angDiff, Sound, fmt, say, Save } from './core.js';
 import { RANKS, WEAPONS, NATIONS, CRATE_POOL, QUIPS, INF } from './data.js';
 import * as MD from './models.js';
+import { FOX_BODY, FoxAnim, FoxAction } from './models.js';
+import { VFX } from './theme.js';
 import { World, WATER_Y, HALF } from './world.js';
 import { Effects } from './effects.js';
 import { AI } from './ai.js';
@@ -9,7 +11,9 @@ import { AI } from './ai.js';
 export const GRAV = 20;
 export const fwd = yaw => new THREE.Vector3(Math.sin(yaw), 0, Math.cos(yaw));
 export const aimDir = (yaw, pitch) => new THREE.Vector3(Math.sin(yaw) * Math.cos(pitch), Math.sin(pitch), Math.cos(yaw) * Math.cos(pitch));
-const WALK = 3.2, RUN = 5.6, SWIM = 1.9, TURN_SPEED = 2.2, STAMINA = 100;
+const WALK = 3.4, RUN = 6.0, SWIM = 1.8, TURN_SPEED = 2.2, STAMINA = 100;
+// Вода: вброд до пояса, глубже — плывём (голова над водой).
+const WADE_DEPTH = -1.15, SWIM_Y = -1.25;
 const CHARGE_KINDS = new Set(['ballistic', 'grenade']);
 const DIRECT_KINDS = new Set(['hitscan', 'burst', 'spread', 'healdart']);
 
@@ -19,8 +23,9 @@ export const VEHICLE_WEAPONS = {
   pillbox: { name: 'Пулемёт дота', kind: 'burst', dmg: 6, shots: 8, range: 70, spread: 0.03, cat: 'gun' },
 };
 
-/* ================= свинья ================= */
-export class Hog {
+/* ================= лиса-солдат ================= */
+// Столкновения — вертикальная капсула: радиус FOX_BODY.radius, высота FOX_BODY.height.
+export class Fox {
   constructor(b, team, spec) {
     this.b = b; this.team = team; this.name = spec.name; this.rankId = spec.rank; this.rank = RANKS[spec.rank];
     this.rosterId = spec.rosterId ?? null; this.boss = !!spec.boss;
@@ -29,17 +34,26 @@ export class Hog {
     this.pos = new THREE.Vector3(); this.vel = new THREE.Vector3(); this.yaw = 0; this.pitch = 0.2;
     this.ground = true; this.swim = false; this.state = 'alive';
     this.status = { poison: false, sleep: 0, hidden: false, burn: 0 };
-    this.vehicle = null; this.moving = false; this.running = false; this.anim = 'idle';
+    this.vehicle = null; this.moving = false; this.running = false; this.anim = FoxAnim.IDLE;
     this.stats = { kills: 0, dmg: 0 }; this.lastHitBy = null; this.wireHit = false;
-    this.scale = this.boss ? 1.25 : 1;
-    this.model = new MD.HogModel(team.nation, this.rankId, this.rank.line);
+    this.scale = this.boss ? 1.12 : 1;
+    this.collider = { radius: FOX_BODY.radius * this.scale, height: FOX_BODY.height * this.scale };
+    this.model = new MD.BipedalFox(team.nation, this.rankId, this.rank.line);
     this.model.root.scale.setScalar(this.scale);
     this.weapon = null; this.grave = null; this.deadT = 0;
     b.scene.add(this.model.root);
   }
   get alive() { return this.state === 'alive'; }
-  center() { return this.pos.clone().setY(this.pos.y + (this.swim ? 0.3 : 0.8) * this.scale); }
-  muzzle(pitch = this.pitch) { return this.pos.clone().add(new THREE.Vector3(0, 1.0 * this.scale, 0)).addScaledVector(aimDir(this.yaw, pitch), 0.9 * this.scale); }
+  // Центр масс: середина капсулы (в воде — верх корпуса у поверхности).
+  center() { return this.pos.clone().setY(this.pos.y + (this.swim ? 1.2 : FOX_BODY.height * 0.5) * this.scale); }
+  head() { return this.pos.clone().setY(this.pos.y + FOX_BODY.eye * this.scale); }
+  muzzle(pitch = this.pitch) { return this.pos.clone().add(new THREE.Vector3(0, FOX_BODY.muzzle * this.scale, 0)).addScaledVector(aimDir(this.yaw, pitch), 0.55 * this.scale); }
+  // Расстояние от точки до поверхности капсулы (отрицательное — внутри).
+  capsuleDist(p) {
+    const r = this.collider.radius, y0 = this.pos.y + r, y1 = this.pos.y + this.collider.height - r;
+    const cy = clamp(p.y, y0, y1);
+    return Math.hypot(p.x - this.pos.x, p.y - cy, p.z - this.pos.z) - r;
+  }
   count(id) { return this.inv[id] ?? 0; }
   has(id) { const c = this.count(id); return c === INF || c > 0; }
   use(id) { if (this.inv[id] !== INF && this.inv[id] > 0) this.inv[id]--; }
@@ -89,10 +103,12 @@ export class Battle {
     this.scene = new THREE.Scene();
     this.camera = new THREE.PerspectiveCamera(55, 1, 0.1, 1000);
     this.quality = cfg.quality;
+    MD.setMaterialQuality(this.quality);
     this.world = new World(this.scene, cfg.map, this.quality);
+    renderer.toneMappingExposure = this.world.theme.exposure ?? 1;
     this.fx = new Effects(this.scene, this.world);
     this.ai = new AI(this);
-    this.teams = []; this.hogs = []; this.vehicles = []; this.proj = []; this.queue = []; this.mines = []; this.tnts = []; this.gas = [];
+    this.teams = []; this.foxes = []; this.vehicles = []; this.proj = []; this.queue = []; this.mines = []; this.tnts = []; this.gas = [];
     this.crates = []; this.graves = []; this.floats = []; this.airships = [];
     this.wind = new THREE.Vector3();
     this.round = 0; this.turnIdx = -1; this.active = null; this.state = 'intro'; this.introT = 3.2;
@@ -120,14 +136,14 @@ export class Battle {
     const zones = this.zonesFor(this.cfg.teams.length);
     this.zones = zones;
     this.cfg.teams.forEach((tc, i) => {
-      const team = { idx: i, nation: NATIONS[tc.nation], name: tc.name || NATIONS[tc.nation].name, control: tc.control, ai: tc.ai ?? 1.3, hogs: [], cyc: -1, zone: zones[i] };
+      const team = { idx: i, nation: NATIONS[tc.nation], name: tc.name || NATIONS[tc.nation].name, control: tc.control, ai: tc.ai ?? 1.3, foxes: [], cyc: -1, zone: zones[i] };
       this.teams.push(team);
-      for (const spec of tc.hogs) {
-        const h = new Hog(this, team, spec);
-        const s = this.spotIn(zones[i], this.hogs.map(o => o.pos));
+      for (const spec of tc.foxes) {
+        const h = new Fox(this, team, spec);
+        const s = this.spotIn(zones[i], this.foxes.map(o => o.pos));
         h.pos.set(s.x, this.world.groundAt(s.x, s.z), s.z);
         h.yaw = Math.atan2(-s.x, -s.z * 0.3);
-        team.hogs.push(h); this.hogs.push(h);
+        team.foxes.push(h); this.foxes.push(h);
       }
     });
   }
@@ -137,34 +153,34 @@ export class Battle {
     for (const st of (m.structures || [])) {
       const side = st.side, zone = this.zones[side];
       const zx = side === 0 ? [zone.x[0] + 6, zone.x[1] + 6] : [zone.x[0] - 6, zone.x[1] - 6];
-      const s = w.findSpot(zx, [-35, 35], 5, { maxSlope: 0.2, avoid: this.hogs.map(h => h.pos) }) || { x: side ? 30 : -30, z: 0 };
+      const s = w.findSpot(zx, [-35, 35], 5, { maxSlope: 0.2, avoid: this.foxes.map(h => h.pos) }) || { x: side ? 30 : -30, z: 0 };
       const faceYaw = side === 0 ? Math.PI / 2 : -Math.PI / 2;
       const v = new Vehicle(this, st.type, this.teams[side].nation, s.x, s.z, faceYaw, st.hp);
       this.vehicles.push(v);
       let crew = null;
-      if (typeof st.crew === 'number') crew = this.teams[side].hogs[st.crew];
+      if (typeof st.crew === 'number') crew = this.teams[side].foxes[st.crew];
       else if (typeof st.crew === 'string') {
         const team = this.teams[side];
-        crew = new Hog(this, team, { name: pick(team.nation.names) + '-дотчик', rank: st.crew });
-        team.hogs.push(crew); this.hogs.push(crew);
+        crew = new Fox(this, team, { name: pick(team.nation.names) + '-дотчик', rank: st.crew });
+        team.foxes.push(crew); this.foxes.push(crew);
       }
       if (crew) this.enterVehicle(crew, v, true);
     }
     // бочки
     for (let i = 0; i < (m.props?.barrels || 0); i++) {
-      const s = w.findSpot([-50, 50], [-50, 50], 3, { avoid: this.hogs.map(h => h.pos) }); if (!s) continue;
+      const s = w.findSpot([-50, 50], [-50, 50], 3, { avoid: this.foxes.map(h => h.pos) }); if (!s) continue;
       const obj = w.place(MD.buildBarrel(), s.x, s.z);
       const e = w.addStatic(obj, { kind: 'cyl', x: s.x, z: s.z, r: 0.45, y0: obj.position.y - 1, y1: obj.position.y + 1.1, walk: true }, 1, 'barrel');
       e.pos = obj.position;
     }
     // ящики на карте
     for (let i = 0; i < (m.props?.crates ?? (this.cfg.crates ? 3 : 0)); i++) {
-      const s = w.findSpot([-60, 60], [-55, 55], 3, { avoid: this.hogs.map(h => h.pos) }); if (!s) continue;
+      const s = w.findSpot([-60, 60], [-55, 55], 3, { avoid: this.foxes.map(h => h.pos) }); if (!s) continue;
       this.spawnCrate(Math.random() < 0.3 ? 'health' : 'weapon', s.x, s.z, false);
     }
     // медали
     for (let i = 0; i < (m.medals || 0); i++) {
-      const s = w.findSpot([-20, 55], [-55, 55], 4, { avoid: this.hogs.map(h => h.pos) }); if (!s) continue;
+      const s = w.findSpot([-20, 55], [-55, 55], 4, { avoid: this.foxes.map(h => h.pos) }); if (!s) continue;
       this.spawnCrate('medal', s.x, s.z, false);
     }
     // минное поле
@@ -184,13 +200,14 @@ export class Battle {
     this.aimDots = [];
     const g = new THREE.SphereGeometry(1, 6, 4);
     for (let i = 0; i < 40; i++) {
-      const d = new THREE.Mesh(g, new THREE.MeshBasicMaterial({ color: 0xffe08a, transparent: true, opacity: 0.85, depthTest: true }));
+      const d = new THREE.Mesh(g, new THREE.MeshBasicMaterial({ color: VFX.aimDot, transparent: true, opacity: 0.8, depthTest: true }));
       d.scale.setScalar(0.07); d.visible = false; this.scene.add(d); this.aimDots.push(d);
     }
-    this.ring = new THREE.Mesh(new THREE.TorusGeometry(3.8, 0.2, 6, 36), new THREE.MeshBasicMaterial({ color: 0xff3b2f }));
+    this.ring = new THREE.Mesh(new THREE.TorusGeometry(3.8, 0.08, 6, 48), new THREE.MeshBasicMaterial({ color: VFX.target }));
     this.ring.rotation.x = Math.PI / 2; this.ring.visible = false; this.scene.add(this.ring);
-    this.arrow = new THREE.Mesh(new THREE.ConeGeometry(0.3, 0.6, 4), new THREE.MeshBasicMaterial({ color: 0xFFD66B }));
-    this.arrow.rotation.x = Math.PI; this.scene.add(this.arrow);
+    // маркер активного бойца — тонкое кольцо на земле
+    this.marker = new THREE.Mesh(new THREE.RingGeometry(0.62, 0.7, 40), new THREE.MeshBasicMaterial({ color: VFX.marker, transparent: true, opacity: 0.85, side: THREE.DoubleSide, depthWrite: false }));
+    this.marker.rotation.x = -Math.PI / 2; this.scene.add(this.marker);
   }
 
   /* ---------- сообщения ---------- */
@@ -198,7 +215,7 @@ export class Battle {
   float(pos, text, color) { this.floats.push({ pos: pos.clone(), text, color, t: 1.6 }); }
 
   /* ---------- ходы ---------- */
-  aliveTeams() { return this.teams.filter(t => t.hogs.some(h => h.alive)); }
+  aliveTeams() { return this.teams.filter(t => t.foxes.some(h => h.alive)); }
   isHuman(team) { return team.control === 'human'; }
   nextTurn() {
     if (this.checkEnd()) return;
@@ -208,13 +225,13 @@ export class Battle {
       this.turnIdx = (this.turnIdx + 1) % n;
       if (this.turnIdx === 0) this.newRound();
       tries++;
-    } while (!this.teams[this.turnIdx].hogs.some(h => h.alive) && tries <= n * 2);
+    } while (!this.teams[this.turnIdx].foxes.some(h => h.alive) && tries <= n * 2);
     if (this.checkEnd()) return;
     const team = this.teams[this.turnIdx];
-    const list = team.hogs;
-    let hog = null;
-    for (let k = 1; k <= list.length; k++) { const j = (team.cyc + k) % list.length; if (list[j].alive) { team.cyc = j; hog = list[j]; break; } }
-    this.beginHogTurn(hog);
+    const list = team.foxes;
+    let fox = null;
+    for (let k = 1; k <= list.length; k++) { const j = (team.cyc + k) % list.length; if (list[j].alive) { team.cyc = j; fox = list[j]; break; } }
+    this.beginFoxTurn(fox);
   }
   newRound() {
     this.round++;
@@ -225,28 +242,28 @@ export class Battle {
     if (this.cfg.wind) { const a = rnd(0, Math.PI * 2), k = rnd(0.1, 1); this.wind.set(Math.sin(a) * k * 6, 0, Math.cos(a) * k * 6); }
     this.hooks.round?.(this.round);
   }
-  beginHogTurn(hog) {
-    this.active = hog; this.charging = false; this.power = 0; this.scope = false; this.target = null; this.camMode = null;
-    this.stamina = STAMINA; this.jetFuel = 0; this.freeUsed = 0; this.actedMove = false; hog.wireHit = false;
+  beginFoxTurn(fox) {
+    this.active = fox; this.charging = false; this.power = 0; this.scope = false; this.target = null; this.camMode = null;
+    this.stamina = STAMINA; this.jetFuel = 0; this.freeUsed = 0; this.actedMove = false; fox.wireHit = false;
     this.timer = this.cfg.turnTime; this.state = 'turn'; this.lastBoom = null;
     Object.assign(this.input, { dragYaw: 0, dragPitch: 0, tap: null, firePressed: false, fireReleased: false, fire: false, jump: false, enter: false, scope: false });
-    if (hog.status.hidden) { hog.status.hidden = false; hog.model.setHidden(false); }
+    if (fox.status.hidden) { fox.status.hidden = false; fox.model.setHidden(false); }
     // статусы
     let skip = false;
-    if (hog.status.poison) { this.hurt(hog, 5, null, 'poison'); this.msg(`${hog.name}: яд −5`, 'warn'); }
-    if (hog.status.burn > 0) { hog.status.burn--; this.hurt(hog, 5, null, 'burn'); }
-    for (const g of this.gas) if (hog.pos.distanceTo(g.pos) < g.r) { hog.status.poison = true; }
-    if (hog.status.sleep > 0) { hog.status.sleep--; skip = true; this.msg(`${hog.name} спит и пропускает ход`, 'warn'); }
-    if (hog.hp <= 0) skip = true;
-    const w = this.defaultWeapon(hog); this.selectWeapon(w, true);
-    this.hooks.turn?.(hog);
+    if (fox.status.poison) { this.hurt(fox, 5, null, 'poison'); this.msg(`${fox.name}: яд −5`, 'warn'); }
+    if (fox.status.burn > 0) { fox.status.burn--; this.hurt(fox, 5, null, 'burn'); }
+    for (const g of this.gas) if (fox.pos.distanceTo(g.pos) < g.r) { fox.status.poison = true; }
+    if (fox.status.sleep > 0) { fox.status.sleep--; skip = true; this.msg(`${fox.name} спит и пропускает ход`, 'warn'); }
+    if (fox.hp <= 0) skip = true;
+    const w = this.defaultWeapon(fox); this.selectWeapon(w, true);
+    this.hooks.turn?.(fox);
     Sound.play('turn');
     if (skip) { this.endTurn(); return; }
-    if (!this.isHuman(hog.team)) this.ai.begin(hog);
+    if (!this.isHuman(fox.team)) this.ai.begin(fox);
   }
-  defaultWeapon(hog) {
-    for (const id of ['rifle', 'sniper', 'mg', 'hmg', 'shotgun', 'supershotgun', 'pistol', 'bazooka']) if (hog.has(id)) return id;
-    return Object.keys(hog.inv).find(k => hog.has(k)) || null;
+  defaultWeapon(fox) {
+    for (const id of ['rifle', 'sniper', 'mg', 'hmg', 'shotgun', 'supershotgun', 'pistol', 'bazooka']) if (fox.has(id)) return id;
+    return Object.keys(fox.inv).find(k => fox.has(k)) || null;
   }
   endTurn() {
     if (this.state !== 'turn' && this.state !== 'retreat') return;
@@ -256,11 +273,11 @@ export class Battle {
   settled() {
     if (this.proj.length || this.queue.length || this.tnts.length) return false;
     if (this.mines.some(m => m.trig >= 0)) return false;
-    return this.hogs.every(h => !h.alive || h.ground || h.swim || h.vehicle);
+    return this.foxes.every(h => !h.alive || h.ground || h.swim || h.vehicle);
   }
   finishTurn() {
     // гибель
-    for (const h of this.hogs) if (h.alive && h.hp <= 0) this.kill(h);
+    for (const h of this.foxes) if (h.alive && h.hp <= 0) this.kill(h);
     // мины, поставленные в этот ход, взводятся
     for (const m of this.mines) m.armed = true;
     // цель «дойти до флага»
@@ -274,8 +291,8 @@ export class Battle {
     const alive = this.aliveTeams();
     const player = this.teams[0];
     if (this.cfg.mode === 'campaign') {
-      if (!player.hogs.some(h => h.alive)) { this.finish(1, 'Отряд разбит'); return true; }
-      if (obj === 'boss') { const boss = this.teams[1].hogs[m.boss ?? 0]; if (!boss.alive) { this.finish(0, `${boss.name} повержен. Гарнизон сдаётся!`); return true; } }
+      if (!player.foxes.some(h => h.alive)) { this.finish(1, 'Отряд разбит'); return true; }
+      if (obj === 'boss') { const boss = this.teams[1].foxes[m.boss ?? 0]; if (!boss.alive) { this.finish(0, `${boss.name} повержен. Гарнизон сдаётся!`); return true; } }
       if (obj === 'survive' && this.round > m.objective.rounds) { this.finish(0, 'Продержались до заката!'); return true; }
       if (alive.length === 1 && alive[0] === player) { this.finish(0, 'Противник уничтожен'); return true; }
       return false;
@@ -289,11 +306,11 @@ export class Battle {
     const player = this.teams[0];
     this.result = {
       winner, text, playerWon: winner === 0,
-      allSurvived: player.hogs.every(h => h.alive),
+      allSurvived: player.foxes.every(h => h.alive),
       medals: this.medalsFound,
-      hogs: this.hogs.map(h => ({ name: h.name, team: h.team.idx, rosterId: h.rosterId, kills: h.stats.kills, dmg: h.stats.dmg, alive: h.alive })),
+      foxes: this.foxes.map(h => ({ name: h.name, team: h.team.idx, rosterId: h.rosterId, kills: h.stats.kills, dmg: h.stats.dmg, alive: h.alive })),
     };
-    for (const h of this.hogs) if (h.alive && h.team.idx === winner) h.anim = 'celebrate';
+    for (const h of this.foxes) if (h.alive && h.team.idx === winner) h.anim = FoxAnim.CELEBRATE;
     Sound.play(winner === 0 || (this.cfg.mode !== 'campaign' && winner >= 0 && this.isHuman(this.teams[winner])) ? 'win' : 'lose');
     setTimeout(() => this.hooks.end?.(this.result), 2600);
   }
@@ -305,9 +322,9 @@ export class Battle {
     amount = Math.round(amount);
     h.hp = Math.max(0, h.hp - amount);
     if (src && src !== h) { h.lastHitBy = src; if (src.team !== h.team) src.stats.dmg += amount; }
-    this.float(h.center().add(new THREE.Vector3(0, 1.4, 0)), '−' + amount, h.team.nation.css);
+    this.float(h.head().add(new THREE.Vector3(0, 0.55, 0)), '−' + amount, VFX.damageText);
     h.model.hit();
-    Sound.play(h.hp <= 0 ? 'squeal' : 'oink', h.scale > 1 ? 0.8 : 1);
+    Sound.play(h.hp <= 0 ? 'scream' : 'yelp', h.scale > 1 ? 0.8 : 1);
     if (h === this.active && this.state === 'turn' && (!src || src === h) && cause !== 'poison' && cause !== 'burn') {
       this.msg(pick(QUIPS.self), 'quip'); this.endTurn();
     }
@@ -315,11 +332,11 @@ export class Battle {
   heal(h, amount) {
     if (!h.alive) return;
     const before = h.hp; h.hp = Math.min(h.maxHp, h.hp + amount); h.status.poison = false;
-    this.float(h.center().add(new THREE.Vector3(0, 1.4, 0)), '+' + (h.hp - before), '#7aff9a');
+    this.float(h.head().add(new THREE.Vector3(0, 0.55, 0)), '+' + (h.hp - before), VFX.healText);
     this.fx.healBurst(h.pos);
   }
   kill(h) {
-    h.state = 'dead'; h.anim = 'dead'; h.deadT = 0;
+    h.state = 'dead'; h.anim = FoxAnim.DEATH; h.deadT = 0;
     if (h.vehicle) { h.vehicle.occupant = null; h.vehicle = null; h.model.root.visible = true; }
     const k = h.lastHitBy; if (k && k.team !== h.team) k.stats.kills++;
     this.msg(fmt(pick(QUIPS.kill), h.name), 'kill');
@@ -373,6 +390,11 @@ export class Battle {
     const power = Math.max(0.12, this.power);
     this.charging = false; this.power = 0;
     let ends = !w.free, retreat = false;
+    if (!inVeh) {
+      const act = { melee: FoxAction.ATTACK, grenade: FoxAction.THROW, place: FoxAction.PLACE, healtouch: FoxAction.PLACE }[w.kind]
+        || (['hitscan', 'healdart', 'burst', 'spread', 'flame', 'ballistic'].includes(w.kind) ? FoxAction.FIRE : null);
+      if (act) h.model.play(act);
+    }
     switch (w.kind) {
       case 'melee': ends = this.fireMelee(h, w); break;
       case 'hitscan': case 'healdart': this.fireHitscan(h, w, origin, dir, 1); break;
@@ -397,11 +419,11 @@ export class Battle {
     else if (ends) this.endTurn();
     this.hooks.update?.();
   }
-  hogsNear(p, r, filter) { return this.hogs.filter(o => o.alive && !o.vehicle && o.center().distanceTo(p) < r && (!filter || filter(o))); }
+  foxesNear(p, r, filter) { return this.foxes.filter(o => o.alive && !o.vehicle && o.center().distanceTo(p) < r && (!filter || filter(o))); }
   fireMelee(h, w) {
     Sound.play('swing');
     const f = fwd(h.yaw);
-    const targets = this.hogsNear(h.center(), w.range + 0.6, o => o !== h).filter(o => { const d = o.pos.clone().sub(h.pos).setY(0); return d.length() < 0.3 || d.normalize().dot(f) > 0.4; });
+    const targets = this.foxesNear(h.center(), w.range + 0.6, o => o !== h).filter(o => { const d = o.pos.clone().sub(h.pos).setY(0); return d.length() < 0.3 || d.normalize().dot(f) > 0.4; });
     targets.sort((a, b) => a.pos.distanceTo(h.pos) - b.pos.distanceTo(h.pos));
     const t = targets[0];
     // удар по технике
@@ -415,19 +437,19 @@ export class Battle {
     if (w.stun) { t.status.sleep = Math.max(t.status.sleep, 1); this.fx.sparks(t.center()); }
     this.hurt(t, w.dmg, h);
     t.vel.copy(f).multiplyScalar(w.push).setY(3 + w.push * 0.3); t.ground = false; t.swim = false;
-    this.fx.impact(t.center(), 'hog');
+    this.fx.impact(t.center(), 'fox');
     this.msg(pick(QUIPS.hit), 'quip');
     return true;
   }
   traceShot(h, origin, dir, range, ignoreVeh) {
-    // луч с проверкой свиней, построек и рельефа
+    // луч с проверкой бойцов (капсулы), построек и рельефа
     const step = 0.2, p = origin.clone();
     for (let d = 0; d < range; d += step) {
       p.addScaledVector(dir, step);
-      for (const o of this.hogs) {
+      for (const o of this.foxes) {
         if (!o.alive || o === h || o.vehicle) continue;
-        const c = o.center(), rr = 0.62 * o.scale;
-        if (Math.abs(c.x - p.x) < rr && Math.abs(c.z - p.z) < rr && Math.abs(c.y - p.y) < rr * 1.1 && c.distanceTo(p) < rr) return { type: 'hog', hog: o, point: p.clone() };
+        if (Math.abs(o.pos.x - p.x) > 0.6 || Math.abs(o.pos.z - p.z) > 0.6) continue;
+        if (o.capsuleDist(p) < 0) return { type: 'fox', fox: o, point: p.clone() };
       }
       const y = this.world.getH(p.x, p.z);
       if (p.y <= y) return { type: 'terrain', point: p.clone() };
@@ -448,15 +470,15 @@ export class Battle {
     for (let i = 0; i < n; i++) {
       const d = dir.clone().add(new THREE.Vector3(rnd(-1, 1), rnd(-1, 1), rnd(-1, 1)).multiplyScalar(w.spread || 0)).normalize();
       const r = this.traceShot(h, origin, d, w.range, h.vehicle);
-      this.fx.tracer(origin, r.point, w.kind === 'healdart' ? 0x7aff9a : 0xffe08a);
-      if (r.type === 'hog') {
+      this.fx.tracer(origin, r.point, w.kind === 'healdart' ? VFX.healTracer : VFX.tracer);
+      if (r.type === 'fox') {
         anyHit = true;
-        if (w.kind === 'healdart') { this.heal(r.hog, w.heal); Sound.play('heal'); continue; }
+        if (w.kind === 'healdart') { this.heal(r.fox, w.heal); Sound.play('heal'); continue; }
         const falloff = w.kind === 'spread' ? clamp(1.2 - r.point.distanceTo(origin) / w.range, 0.3, 1) : 1;
-        this.hurt(r.hog, w.dmg * falloff, h);
-        if (w.sleep) { r.hog.status.sleep = 1; this.msg(`${r.hog.name} засыпает…`, 'info'); }
-        r.hog.vel.addScaledVector(d, 1.5);
-        this.fx.impact(r.point, 'hog');
+        this.hurt(r.fox, w.dmg * falloff, h);
+        if (w.sleep) { r.fox.status.sleep = 1; this.msg(`${r.fox.name} засыпает…`, 'info'); }
+        r.fox.vel.addScaledVector(d, 1.5);
+        this.fx.impact(r.point, 'fox');
       } else if (r.type === 'solid') { if (r.col.ent) this.damageEnt(r.col.ent, w.dmg * 0.6, h); this.fx.impact(r.point, 'dirt'); }
       else if (r.type === 'terrain') this.fx.impact(r.point, 'dirt');
       else if (r.type === 'water') this.fx.impact(r.point, 'water');
@@ -475,11 +497,11 @@ export class Battle {
   fireFlame(h, w, origin, dir) {
     Sound.play('flame');
     for (let i = 0; i < 20; i++) this.queue.push({ t: i * 0.04, fn: () => this.fx.flame(origin, dir, w.range * 0.5) });
-    for (const o of this.hogs) {
+    for (const o of this.foxes) {
       if (!o.alive || o === h || o.vehicle) continue;
       const v = o.center().sub(origin), d = v.length();
       if (d < w.range && v.normalize().dot(dir) > 0.9) {
-        if (this.traceShot(h, origin, v, d + 0.5).hog !== o) continue;
+        if (this.traceShot(h, origin, v, d + 0.5).fox !== o) continue;
         this.hurt(o, w.dmg * (1 - d / w.range * 0.4), h); o.status.burn = 2;
       }
     }
@@ -536,7 +558,7 @@ export class Battle {
   shockwave(h, w) {
     Sound.play('boom', 1.5);
     this.fx.explosion(h.center(), 3, { air: true });
-    for (const o of this.hogs) {
+    for (const o of this.foxes) {
       if (!o.alive || o === h) continue;
       const v = o.center().sub(h.center()), d = v.length();
       if (d < w.r) { const f = 1 - d / w.r; this.hurt(o, w.dmg * f + 5, h); o.vel.copy(v.normalize().multiplyScalar(16 * f + 4)).setY(8 * f + 3); o.ground = false; o.swim = false; }
@@ -544,14 +566,14 @@ export class Battle {
     this.shake = 1;
   }
   healTouch(h, w) {
-    const allies = this.hogsNear(h.center(), w.range, o => o !== h && o.team === h.team && (o.hp < o.maxHp || o.status.poison));
+    const allies = this.foxesNear(h.center(), w.range, o => o !== h && o.team === h.team && (o.hp < o.maxHp || o.status.poison));
     if (!allies.length) { this.msg('Рядом нет раненого союзника', 'warn'); return false; }
     allies.sort((a, b) => a.hp / a.maxHp - b.hp / b.maxHp);
     this.heal(allies[0], w.heal); Sound.play('heal');
     return true;
   }
   pickpocket(h, w) {
-    const foes = this.hogsNear(h.center(), w.range, o => o.team !== h.team);
+    const foes = this.foxesNear(h.center(), w.range, o => o.team !== h.team);
     if (!foes.length) { this.msg('Рядом нет противника', 'warn'); return false; }
     const f = foes[0], items = Object.keys(f.inv).filter(k => f.inv[k] > 0 && f.inv[k] !== INF);
     if (!items.length) { this.msg(`У ${f.name} нечего украсть`, 'warn'); return true; }
@@ -571,9 +593,9 @@ export class Battle {
     else { this.fx.explosion(p, r, { air }); Sound.play(r > 3 ? 'boom' : 'smallboom', r / 5); this.shake = Math.min(1.4, r * 0.18); }
     if (p.y < 0.3 && w.getH(p.x, p.z) < 0) this.fx.splash(p, 1);
     this.lastBoom = p.clone(); this.boomT = 1.6;
-    for (const h of this.hogs) {
+    for (const h of this.foxes) {
       if (!h.alive) continue;
-      const c = h.vehicle ? h.vehicle.pos.clone().setY(h.vehicle.pos.y + 1) : h.center(), d = c.distanceTo(p);
+      const c = h.vehicle ? h.vehicle.pos.clone().setY(h.vehicle.pos.y + 1) : h.center(), d = h.vehicle ? c.distanceTo(p) : Math.max(0, h.capsuleDist(p));
       if (d >= r + 0.8) continue;
       const f = 1 - d / (r + 0.8);
       if (opts.heal) { this.heal(h, opts.heal); continue; }
@@ -606,7 +628,7 @@ export class Battle {
     if (e.hp <= 0 || dmg <= 0) return;
     e.hp -= dmg;
     if (e.vehicle) {
-      this.float(e.vehicle.pos.clone().setY(e.vehicle.pos.y + 3), '−' + Math.round(dmg), '#E8B84A');
+      this.float(e.vehicle.pos.clone().setY(e.vehicle.pos.y + 3), '−' + Math.round(dmg), VFX.damageText);
       if (e.vehicle.occupant && owner && owner !== e.vehicle.occupant) owner.stats.dmg += Math.round(dmg);
     }
     if (e.hp <= 0) this.destroyEnt(e, owner);
@@ -633,8 +655,8 @@ export class Battle {
     }
     for (let k = 0; k < 14; k++) this.fx.chunk(pos.clone(), new THREE.Vector3(rnd(-5, 5), rnd(3, 9), rnd(-5, 5)), e.kind === 'sandbags' ? 0xb39d6c : e.kind === 'fence' ? 0x7c5a36 : 0x7d766a, rnd(0.2, 0.5), 2.5);
     this.fx.puff(pos, 0x9a8a70, 3, 2);
-    // обрушение строения — свиньи на крыше падают
-    for (const h of this.hogs) if (h.alive && w.inFoot(e.col, h.pos.x, h.pos.z, 0.3)) h.ground = false;
+    // обрушение строения — бойцы на крыше падают
+    for (const h of this.foxes) if (h.alive && w.inFoot(e.col, h.pos.x, h.pos.z, 0.3)) h.ground = false;
   }
 
   /* ---------- техника ---------- */
@@ -651,7 +673,7 @@ export class Battle {
     const back = fwd(v.yaw).multiplyScalar(-(v.type === 'pillbox' ? 3.4 : 3));
     for (let a = 0; a < 8; a++) {
       const p = v.pos.clone().add(back.clone().applyAxisAngle(new THREE.Vector3(0, 1, 0), a * Math.PI / 4));
-      if (!this.world.blocked(p.x, p.z, this.world.groundAt(p.x, p.z) + 0.1)) { h.pos.set(p.x, this.world.groundAt(p.x, p.z), p.z); break; }
+      if (!this.world.blocked(p.x, p.z, this.world.groundAt(p.x, p.z) + 0.1, h.collider.height, h.collider.radius)) { h.pos.set(p.x, this.world.groundAt(p.x, p.z), p.z); break; }
     }
     h.ground = true; this.hooks.update?.();
   }
@@ -676,11 +698,11 @@ export class Battle {
   reinforce(ranks) {
     const team = this.teams[1];
     for (const r of ranks) {
-      const h = new Hog(this, team, { name: pick(team.nation.names), rank: r });
-      const s = this.spotIn(team.zone, this.hogs.map(o => o.pos));
-      h.pos.set(s.x, 35, s.z); h.ground = false; h.vel.set(0, 0, 0); h.chute = MD.buildParachute(); h.model.root.add(h.chute); h.chute.position.y = 0.6;
+      const h = new Fox(this, team, { name: pick(team.nation.names), rank: r });
+      const s = this.spotIn(team.zone, this.foxes.map(o => o.pos));
+      h.pos.set(s.x, 35, s.z); h.ground = false; h.vel.set(0, 0, 0); h.chute = MD.buildParachute(); h.model.root.add(h.chute); h.chute.position.y = 1.1;
       h.yaw = -Math.PI / 2;
-      team.hogs.push(h); this.hogs.push(h);
+      team.foxes.push(h); this.foxes.push(h);
     }
     this.msg('Подкрепление противника спускается на парашютах!', 'warn');
   }
@@ -749,7 +771,7 @@ export class Battle {
     h.running = canRun && inp.fwd > 0;
     const speed = h.swim ? SWIM : h.running ? RUN : WALK;
     if (h.running) this.stamina = Math.max(0, this.stamina - 22 * dt);
-    this.moveHog(h, inp.fwd * speed, dt);
+    this.moveFox(h, inp.fwd * speed, dt);
     if (inp.fwd) this.scope = false;
     // прыжок / ранец
     if (this.jetFuel > 0 && inp.jumpHeld) {
@@ -765,7 +787,7 @@ export class Battle {
     }
     inp.jump = false;
   }
-  moveHog(h, speed, dt) {
+  moveFox(h, speed, dt) {
     const w = this.world;
     h.moving = Math.abs(speed) > 0.01 && (h.ground || h.swim);
     if (!h.moving) return;
@@ -775,10 +797,10 @@ export class Battle {
     const nx = h.pos.x + f.x * speed * dt * k, nz = h.pos.z + f.z * speed * dt * k;
     const tryMove = (x, z) => {
       if (!w.inside(x, z)) return false;
-      if (w.blocked(x, z, h.pos.y)) return false;
+      if (w.blocked(x, z, h.pos.y, h.collider.height, h.collider.radius)) return false;
       const g = w.groundAt(x, z, h.pos.y);
       if (!h.swim && g - h.pos.y > 0.75) return false;
-      if (h.swim && g - Math.max(h.pos.y, -0.6) > 1.0) return false;
+      if (h.swim && g - h.pos.y > 1.6) return false; // выбраться на берег можно только на пологом месте
       h.pos.x = x; h.pos.z = z;
       return true;
     };
@@ -794,12 +816,12 @@ export class Battle {
     return hit ? hit.point : null;
   }
 
-  /* ---------- физика свиней ---------- */
-  updHog(h, dt) {
+  /* ---------- физика бойцов ---------- */
+  updFox(h, dt) {
     const w = this.world;
     if (h.state === 'dead') {
       h.deadT += dt;
-      h.model.update(dt, 'dead');
+      h.model.update(dt, FoxAnim.DEATH);
       if (h.deadT > 1.4 && !h.grave) {
         h.grave = MD.buildGrave(h.team.nation); h.grave.position.copy(h.pos); h.grave.position.y = w.groundAt(h.pos.x, h.pos.z); h.grave.rotation.y = h.yaw;
         this.scene.add(h.grave); this.scene.remove(h.model.root);
@@ -808,7 +830,7 @@ export class Battle {
       if (h.grave) h.grave.position.y = Math.max(w.groundAt(h.pos.x, h.pos.z), -0.4);
       return;
     }
-    if (h.vehicle) { h.model.update(dt, 'idle'); return; }
+    if (h.vehicle) { h.model.update(dt, FoxAnim.IDLE); return; }
     if (!h.ground && !h.swim) {
       const chute = !!h.chute;
       h.vel.y -= GRAV * dt * (chute ? 0.1 : 1);
@@ -816,11 +838,11 @@ export class Battle {
       const steps = Math.max(1, Math.ceil(h.vel.length() * dt / 0.3));
       for (let s = 0; s < steps; s++) {
         const nx = h.pos.x + h.vel.x * dt / steps, nz = h.pos.z + h.vel.z * dt / steps, ny = h.pos.y + h.vel.y * dt / steps;
-        if (!w.inside(nx, nz) || w.blocked(nx, nz, ny)) { h.vel.x *= -0.25; h.vel.z *= -0.25; }
+        if (!w.inside(nx, nz) || w.blocked(nx, nz, ny, h.collider.height, h.collider.radius)) { h.vel.x *= -0.25; h.vel.z *= -0.25; }
         else { h.pos.x = nx; h.pos.z = nz; }
         h.pos.y = ny;
         const g = w.groundAt(h.pos.x, h.pos.z, h.pos.y + 0.3);
-        if (h.pos.y <= g && g >= WATER_Y - 0.5) {
+        if (h.pos.y <= g && g >= WADE_DEPTH) {
           const vy = h.vel.y; h.pos.y = g; h.vel.set(0, 0, 0); h.ground = true;
           if (chute) { h.model.root.remove(h.chute); h.chute = null; }
           else if (vy < -11) { this.hurt(h, (-vy - 11) * 4, h.lastHitBy && this.state === 'resolve' ? h.lastHitBy : null, 'fall'); this.msg(`${h.name} больно приземлился`, 'warn'); }
@@ -828,30 +850,33 @@ export class Battle {
           for (const m of this.mines) if (m.armed && m.trig < 0 && m.pos.distanceTo(h.pos) < 1.5) m.trig = 1.0;
           break;
         }
-        if (h.pos.y < WATER_Y - 0.45 && g < WATER_Y - 0.5) { this.enterWater(h); break; }
+        if (h.pos.y < SWIM_Y + 0.1 && g < WADE_DEPTH) { this.enterWater(h); break; }
       }
     } else if (h.swim) {
-      h.pos.y += (-0.45 + Math.sin(this.t * 3 + h.pos.x) * 0.05 - h.pos.y) * Math.min(1, dt * 5);
+      h.pos.y += (SWIM_Y + Math.sin(this.t * 3 + h.pos.x) * 0.05 - h.pos.y) * Math.min(1, dt * 5);
       const g = w.groundAt(h.pos.x, h.pos.z, h.pos.y + 0.3);
-      if (g > WATER_Y - 0.5) { h.swim = false; h.ground = true; h.pos.y = g; }
+      if (g > WADE_DEPTH + 0.05) { h.swim = false; h.ground = true; h.pos.y = g; }
       if (w.isPoisonWater() && !h.status.poison) { h.status.poison = true; this.msg(fmt(QUIPS.poison[0], h.name), 'warn'); }
     } else {
       const g = w.groundAt(h.pos.x, h.pos.z, h.pos.y + 0.3);
-      if (g < WATER_Y - 0.5) this.enterWater(h);
+      if (g < WADE_DEPTH) this.enterWater(h);
       else if (h.pos.y > g + 0.08) { h.ground = false; h.vel.set(0, 0, 0); }
       else h.pos.y = g;
+      // вброд по ядовитой воде тоже отравляет
+      if (h.pos.y < WATER_Y - 0.3 && w.isPoisonWater() && !h.status.poison) { h.status.poison = true; this.msg(fmt(QUIPS.poison[0], h.name), 'warn'); }
     }
     // анимация
-    let anim = h.anim === 'celebrate' ? 'celebrate' : h.swim ? 'swim' : !h.ground ? 'air' : h.status.sleep > 0 ? 'sleep' : h.moving ? (h.running ? 'run' : 'walk') : (h === this.active && this.state === 'turn' ? 'aim' : 'idle');
-    h.model.update(dt, anim, h.pitch);
+    const A = FoxAnim;
+    const anim = h.anim === A.CELEBRATE ? A.CELEBRATE : h.swim ? A.SWIM : !h.ground ? A.AIR : h.status.sleep > 0 ? A.SLEEP : h.moving ? (h.running ? A.RUN : A.WALK) : (h === this.active && this.state === 'turn' ? A.AIM : A.IDLE);
+    h.model.update(dt, anim, h.pitch, !!h.weapon);
     h.model.root.position.copy(h.pos);
     h.model.root.rotation.y = h.yaw;
     if (h.status.burn > 0 && Math.random() < 0.3) this.fx.fireOn(h.pos);
-    if (h.status.poison && Math.random() < 0.05) this.fx.puff(h.center().add(new THREE.Vector3(0, 0.6, 0)), 0x8fbf3a, 0.3, 0.8);
+    if (h.status.poison && Math.random() < 0.05) this.fx.puff(h.head(), VFX.gas, 0.3, 0.8);
     h.moving = false;
   }
   enterWater(h) {
-    h.swim = true; h.ground = false; h.vel.set(0, 0, 0); h.pos.y = -0.45;
+    h.swim = true; h.ground = false; h.vel.set(0, 0, 0); h.pos.y = SWIM_Y;
     this.fx.splash(h.pos, 0.8); Sound.play('splash');
     if (Math.random() < 0.5) this.msg(pick(QUIPS.splash), 'quip');
   }
@@ -890,12 +915,12 @@ export class Battle {
           // воздушный разрыв
           if ((p.id === 'airburst' || p.id === 'firerain') && p.vel.y < 0 && p.pos.y - w.groundAt(p.pos.x, p.pos.z) < 7) { this.airburst(p); dead = true; break; }
           let hitHog = null;
-          if (p.kind !== 'grenade') for (const o of this.hogs) { if (o.alive && !o.vehicle && (o !== p.owner || p.t > 0.3) && o.center().distanceTo(p.pos) < 0.75 * o.scale) { hitHog = o; break; } }
+          if (p.kind !== 'grenade') for (const o of this.foxes) { if (o.alive && !o.vehicle && (o !== p.owner || p.t > 0.3) && o.capsuleDist(p.pos) < 0.05) { hitHog = o; break; } }
           const solid = w.solidAt(p.pos.x, p.pos.y, p.pos.z);
           if (solid && solid !== 'terrain' && p.owner?.vehicle && solid === p.owner.vehicle.col && p.t < 0.5) continue;
           if (solid || hitHog) {
             if (p.kind === 'grenade') { this.bounce(p, steps, solid); break; }
-            if (p.kind === 'frag') { if (hitHog) this.hurt(hitHog, p.w.fragDmg, p.owner); this.fx.impact(p.pos, hitHog ? 'hog' : 'dirt'); dead = true; break; }
+            if (p.kind === 'frag') { if (hitHog) this.hurt(hitHog, p.w.fragDmg, p.owner); this.fx.impact(p.pos, hitHog ? 'fox' : 'dirt'); dead = true; break; }
             if (solid && solid !== 'terrain' && solid.ent) this.damageEnt(solid.ent, p.w.dmg * 0.8, p.owner);
             this.explode(p.pos.clone(), p.w.r, p.w.dmg, p.owner, { fire: p.w.fire });
             dead = true; break;
@@ -967,7 +992,7 @@ export class Battle {
       if (this.settled() || this.resolveT > 25) { this.settleT += dt; if (this.settleT > 1.3) this.finishTurn(); }
       else this.settleT = 0;
     }
-    for (const o of this.hogs) this.updHog(o, dt);
+    for (const o of this.foxes) this.updFox(o, dt);
     for (const v of this.vehicles) if (!v.dead && v.type === 'tank' && v !== h?.vehicle) v.sync();
     this.updProj(dt);
     this.updItems(dt);
@@ -1009,7 +1034,7 @@ export class Battle {
         if (c.pos.y <= g) {
           c.pos.y = g; c.falling = false; if (c.chute) { c.obj.remove(c.chute); c.chute = null; }
           if (g < -0.3) { c.gone = true; this.scene.remove(c.obj); this.fx.splash(c.pos, 0.6); }
-          else for (const o of this.hogs) if (o.alive && !o.vehicle) this.checkPickups(o);
+          else for (const o of this.foxes) if (o.alive && !o.vehicle) this.checkPickups(o);
         }
       } else {
         c.pos.y = Math.max(w.groundAt(c.pos.x, c.pos.z), -0.2);
@@ -1045,7 +1070,7 @@ export class Battle {
       const c = h ? h.pos : new THREE.Vector3();
       pos = new THREE.Vector3(c.x * 0.5, 95, c.z * 0.5 + 70); look = new THREE.Vector3(c.x * 0.5, 0, c.z * 0.5);
     } else if (this.state === 'over') {
-      const winners = this.hogs.filter(o => o.alive), c = winners[0]?.pos || new THREE.Vector3();
+      const winners = this.foxes.filter(o => o.alive), c = winners[0]?.pos || new THREE.Vector3();
       const a = this.t * 0.4; pos = c.clone().add(new THREE.Vector3(Math.sin(a) * 9, 5, Math.cos(a) * 9)); look = c.clone().setY(c.y + 1); k = 2;
     } else if (this.proj.some(p => p.cam) && (this.state === 'resolve' || this.state === 'retreat')) {
       const p = this.proj.find(q => q.cam);
@@ -1066,14 +1091,14 @@ export class Battle {
         look = v.pos.clone().add(new THREE.Vector3(0, 2, 0)).addScaledVector(aimDir(v.aimYaw, v.pitch), 12);
       } else if (this.scope) {
         const d = aimDir(h.yaw, h.pitch);
-        pos = h.pos.clone().add(new THREE.Vector3(0, 1.25 * s, 0)).addScaledVector(d, 0.6); look = pos.clone().addScaledVector(d, 20);
+        pos = h.pos.clone().add(new THREE.Vector3(0, FOX_BODY.eye * s, 0)).addScaledVector(d, 0.35); look = pos.clone().addScaledVector(d, 20);
         fov = W === WEAPONS.sniper || W === WEAPONS.tranq ? 16 : 32; k = 30;
       } else {
         const f = fwd(h.yaw), aiming = this.charging || (W && h.ground && !h.moving);
         const right = new THREE.Vector3(-f.z, 0, f.x);
         const dist = aiming ? 6.4 : 8;
-        pos = h.pos.clone().addScaledVector(f, -dist * s).add(new THREE.Vector3(0, (3.0 + Math.max(0, h.pitch) * 1.6) * s, 0)).addScaledVector(right, aiming ? -1.1 : 0);
-        look = h.pos.clone().add(new THREE.Vector3(0, 1.2 * s, 0)).addScaledVector(aimDir(h.yaw, h.pitch), 7);
+        pos = h.pos.clone().addScaledVector(f, -dist * s).add(new THREE.Vector3(0, (3.3 + Math.max(0, h.pitch) * 1.6) * s, 0)).addScaledVector(right, aiming ? -1.0 : 0);
+        look = h.pos.clone().add(new THREE.Vector3(0, FOX_BODY.chest * s, 0)).addScaledVector(aimDir(h.yaw, h.pitch), 7);
         k = 5;
       }
     }
@@ -1093,9 +1118,14 @@ export class Battle {
   updHelpers() {
     const h = this.active, W = this.currentWeapon();
     const show = h && h.alive && this.state === 'turn' && this.isHuman(h.team) && !this.scope;
-    // стрелка над активной свиньёй
-    this.arrow.visible = !!h && h.alive && (this.state === 'turn' || this.state === 'retreat') && !this.scope && (!this.isHuman(h.team) || this.camMode === 'top');
-    if (h) { this.arrow.position.copy(h.vehicle ? h.vehicle.pos : h.pos).y += (h.vehicle ? 4 : 2.7 * h.scale) + Math.sin(this.t * 4) * 0.15; this.arrow.rotation.y += 0.05; }
+    // кольцо под активным бойцом
+    this.marker.visible = !!h && h.alive && (this.state === 'turn' || this.state === 'retreat') && !this.scope;
+    if (h) {
+      const p = h.vehicle ? h.vehicle.pos : h.pos, r = h.vehicle ? 3.2 : 1;
+      this.marker.position.set(p.x, Math.max(p.y, this.world.groundAt(p.x, p.z)) + 0.06, p.z);
+      this.marker.scale.setScalar(r * (1 + Math.sin(this.t * 3) * 0.04));
+      this.marker.material.opacity = 0.55 + Math.sin(this.t * 3) * 0.2;
+    }
     // точки прицела / траектория
     let n = 0;
     if (show && W && W.kind !== 'airstrike' && W.kind !== 'place' && W.kind !== 'selfheal' && W.kind !== 'jetpack' && W.kind !== 'hide') {
@@ -1110,13 +1140,13 @@ export class Battle {
           if (W.wind && this.cfg.wind) v.addScaledVector(this.wind, 1 / 60);
           v.y -= GRAV / 60; p.addScaledVector(v, 1 / 60);
           if (p.y < this.world.getH(p.x, p.z)) break;
-          if (i % 6 === 0) { const d = this.aimDots[n++]; d.visible = true; d.position.copy(p); d.material.color.setHex(0xffe08a); d.scale.setScalar(0.09); }
+          if (i % 6 === 0) { const d = this.aimDots[n++]; d.visible = true; d.position.copy(p); d.material.color.setHex(VFX.aimDot); d.scale.setScalar(0.07); }
         }
       } else {
         for (let i = 0; i < 8; i++) {
           const d = this.aimDots[n++]; d.visible = true; d.position.copy(origin).addScaledVector(dir, 0.8 + i * 0.9);
           const on = this.charging && i / 8 < this.power;
-          d.material.color.setHex(on ? 0xff5a2a : 0xffe08a); d.scale.setScalar(on ? 0.13 : 0.07);
+          d.material.color.setHex(on ? VFX.aimCharge : VFX.aimDot); d.scale.setScalar(on ? 0.1 : 0.05);
         }
       }
     }

@@ -1,6 +1,7 @@
 // Частицы и визуальные эффекты.
 import { THREE, rnd } from './core.js';
 import { TEX, mat } from './models.js';
+import { VFX } from './theme.js';
 
 export class Effects {
   constructor(scene, world) {
@@ -23,62 +24,66 @@ export class Effects {
   }
   explosion(p, r, opts = {}) {
     const q = p.clone();
-    this.sprite(TEX.flash, 0xffffff, q, r * 1.6, 0.35, { grow: r * 3.5, add: true });
+    const E = VFX.explosion;
+    this.sprite(TEX.flash, E.flash, q, r * 1.3, 0.22, { grow: r * 2.8, add: true });
     for (let i = 0; i < 6 + r; i++) {
       const v = new THREE.Vector3(rnd(-1, 1), rnd(0.2, 1.2), rnd(-1, 1)).multiplyScalar(r * 1.2);
-      this.sprite(TEX.flash, i % 2 ? 0xffb050 : 0xff7a2a, q.clone().addScaledVector(v, 0.15), r * rnd(0.5, 0.9), rnd(0.35, 0.6), { vel: v, grow: r * 0.8, add: true });
+      this.sprite(TEX.flash, E.fire[i % 2], q.clone().addScaledVector(v, 0.15), r * rnd(0.45, 0.8), rnd(0.25, 0.45), { vel: v, grow: r * 0.7, add: true, opacity: 0.8 });
     }
-    for (let i = 0; i < 5 + r; i++) {
-      const v = new THREE.Vector3(rnd(-1, 1) * 1.5, rnd(1.5, 3.5), rnd(-1, 1) * 1.5);
-      this.sprite(TEX.smoke, opts.gas ? 0x9ac040 : 0x6a655c, q.clone().add(new THREE.Vector3(rnd(-1, 1) * r * 0.4, rnd(0, r * 0.4), rnd(-1, 1) * r * 0.4)), r * rnd(0.8, 1.3), rnd(1.8, 3.2), { vel: v, grow: r * 0.9, opacity: 0.75 });
+    for (let i = 0; i < 8 + r * 1.5; i++) {
+      const v = new THREE.Vector3(rnd(-1, 1) * 1.5, rnd(1.2, 3), rnd(-1, 1) * 1.5);
+      this.sprite(TEX.smoke, opts.gas ? VFX.gas : E.smoke, q.clone().add(new THREE.Vector3(rnd(-1, 1) * r * 0.4, rnd(0, r * 0.4), rnd(-1, 1) * r * 0.4)), r * rnd(0.8, 1.3), rnd(2.6, 4.5), { vel: v, grow: r * 1.1, opacity: E.smokeOpacity });
     }
     if (!opts.air) {
       const c = this.world.theme.dirt.map(x => Math.round(x * 255));
       const col = (c[0] << 16) | (c[1] << 8) | c[2];
-      for (let i = 0; i < 10 + r * 2; i++) this.chunk(q.clone(), new THREE.Vector3(rnd(-1, 1) * r * 2, rnd(5, 13), rnd(-1, 1) * r * 2), i % 3 ? col : 0x3a2a1a, rnd(0.12, 0.3), rnd(1.2, 2));
+      for (let i = 0; i < 10 + r * 2; i++) this.chunk(q.clone(), new THREE.Vector3(rnd(-1, 1) * r * 2, rnd(5, 13), rnd(-1, 1) * r * 2), i % 3 ? col : E.dirt, rnd(0.1, 0.28), rnd(1.4, 2.4));
     }
     const L = this.world.flashLight; L.position.copy(q).y += 2; L.intensity = 4 + r; L.distance = r * 8;
     // кольцо ударной волны
-    const ring = new THREE.Mesh(new THREE.RingGeometry(0.8, 1, 32), new THREE.MeshBasicMaterial({ color: 0xfff0c0, transparent: true, opacity: 0.6, side: THREE.DoubleSide, depthWrite: false }));
+    const ring = new THREE.Mesh(new THREE.RingGeometry(0.9, 1, 48), new THREE.MeshBasicMaterial({ color: E.ring, transparent: true, opacity: 0.35, side: THREE.DoubleSide, depthWrite: false }));
     ring.rotation.x = -Math.PI / 2; ring.position.copy(q).y += 0.2; this.scene.add(ring);
     this.items.push({ o: ring, life: 0.4, max: 0.4, vel: new THREE.Vector3(), ring: r * 2.2 });
   }
   gasCloud(p, r) {
-    for (let i = 0; i < 10; i++) this.sprite(TEX.smoke, 0x8fbf3a, p.clone().add(new THREE.Vector3(rnd(-r, r) * 0.6, rnd(0, 1.5), rnd(-r, r) * 0.6)), r * rnd(0.6, 1), rnd(3, 5), { vel: new THREE.Vector3(rnd(-0.3, 0.3), 0.2, rnd(-0.3, 0.3)), grow: r * 0.3, opacity: 0.55 });
+    for (let i = 0; i < 10; i++) this.sprite(TEX.smoke, VFX.gas, p.clone().add(new THREE.Vector3(rnd(-r, r) * 0.6, rnd(0, 1.5), rnd(-r, r) * 0.6)), r * rnd(0.6, 1), rnd(3, 5), { vel: new THREE.Vector3(rnd(-0.3, 0.3), 0.2, rnd(-0.3, 0.3)), grow: r * 0.3, opacity: 0.55 });
   }
   healBurst(p) {
-    for (let i = 0; i < 14; i++) this.sprite(TEX.soft, 0x7aff9a, p.clone().add(new THREE.Vector3(rnd(-0.6, 0.6), rnd(0, 1.5), rnd(-0.6, 0.6))), 0.35, 1.2, { vel: new THREE.Vector3(0, rnd(1, 2.5), 0), add: true });
+    this.sprite(TEX.soft, VFX.heal, p.clone().setY(p.y + 1.0), 1.6, 0.9, { grow: 1.2, add: true, opacity: 0.45 });
+    const ring = new THREE.Mesh(new THREE.RingGeometry(0.9, 1, 40), new THREE.MeshBasicMaterial({ color: VFX.heal, transparent: true, opacity: 0.4, side: THREE.DoubleSide, depthWrite: false }));
+    ring.rotation.x = -Math.PI / 2; ring.position.copy(p).y += 0.08; this.scene.add(ring);
+    this.items.push({ o: ring, life: 0.8, max: 0.8, vel: new THREE.Vector3(), ring: 1.2 });
   }
   splash(p, big = 1) {
     for (let i = 0; i < 16 * big; i++) {
-      const m = new THREE.Mesh(this.sphere, mat(0xdcecef)); m.position.set(p.x, 0.1, p.z); m.scale.setScalar(rnd(0.1, 0.22));
+      const m = new THREE.Mesh(this.sphere, mat(VFX.splash, { preset: 'eye' })); m.position.set(p.x, 0.1, p.z); m.scale.setScalar(rnd(0.1, 0.22));
       this.scene.add(m); this.items.push({ o: m, life: 1.2, max: 1.2, vel: new THREE.Vector3(rnd(-3, 3), rnd(5, 10) * big, rnd(-3, 3)), grav: 20, shared: true, water: true });
     }
     const ring = new THREE.Mesh(new THREE.RingGeometry(0.8, 1, 24), new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.6, side: THREE.DoubleSide, depthWrite: false }));
     ring.rotation.x = -Math.PI / 2; ring.position.set(p.x, 0.12, p.z); this.scene.add(ring);
     this.items.push({ o: ring, life: 0.9, max: 0.9, vel: new THREE.Vector3(), ring: 3 * big });
   }
-  puff(p, color = 0xd8d2c4, size = 0.5, life = 0.8) { this.sprite(TEX.smoke, color, p, size, life, { vel: new THREE.Vector3(rnd(-0.2, 0.2), 0.6, rnd(-0.2, 0.2)), grow: size, opacity: 0.6 }); }
-  muzzle(p) { this.sprite(TEX.flash, 0xffe080, p, 0.8, 0.08, { add: true }); }
-  tracer(a, b, color = 0xffe08a) {
+  puff(p, color = 0x8a857c, size = 0.5, life = 0.8) { this.sprite(TEX.smoke, color, p, size, life, { vel: new THREE.Vector3(rnd(-0.2, 0.2), 0.6, rnd(-0.2, 0.2)), grow: size, opacity: 0.6 }); }
+  muzzle(p) { this.sprite(TEX.flash, VFX.muzzle, p, 0.55, 0.06, { add: true }); this.puff(p, 0x6a665e, 0.2, 0.6); }
+  tracer(a, b, color = VFX.tracer) {
     const g = new THREE.BufferGeometry().setFromPoints([a, b]);
     const l = new THREE.Line(g, new THREE.LineBasicMaterial({ color, transparent: true, opacity: 0.9 }));
     this.scene.add(l); this.items.push({ o: l, life: 0.18, max: 0.18, vel: new THREE.Vector3(), line: true });
   }
   impact(p, kind) {
     if (kind === 'water') { this.splash(p, 0.3); return; }
-    this.puff(p, kind === 'hog' ? 0xc84040 : 0x9a8a70, 0.35, 0.5);
-    for (let i = 0; i < 4; i++) this.chunk(p.clone(), new THREE.Vector3(rnd(-2, 2), rnd(2, 5), rnd(-2, 2)), kind === 'hog' ? 0xb83030 : 0x5a4a3a, 0.08, 0.6);
+    this.puff(p, kind === 'fox' ? 0x5a1c16 : 0x6a5e4c, 0.3, 0.5);
+    for (let i = 0; i < 4; i++) this.chunk(p.clone(), new THREE.Vector3(rnd(-2, 2), rnd(2, 5), rnd(-2, 2)), kind === 'fox' ? 0x4a1410 : 0x3a3024, 0.06, 0.6);
   }
   flame(o, dir, len) {
     for (let i = 0; i < 3; i++) {
       const v = dir.clone().multiplyScalar(len * rnd(1.6, 2.2)).add(new THREE.Vector3(rnd(-1, 1), rnd(-0.3, 1), rnd(-1, 1)));
-      this.sprite(TEX.flash, i % 2 ? 0xff8a2a : 0xffc040, o.clone(), 0.5, 0.5, { vel: v, grow: 2.5, add: true });
+      this.sprite(TEX.flash, VFX.explosion.fire[i % 2], o.clone(), 0.5, 0.5, { vel: v, grow: 2.5, add: true });
     }
   }
-  fireOn(p) { this.sprite(TEX.flash, 0xff7a2a, p.clone().add(new THREE.Vector3(rnd(-0.3, 0.3), rnd(0.4, 1.2), rnd(-0.3, 0.3))), 0.5, 0.5, { vel: new THREE.Vector3(0, 1.5, 0), grow: 0.3, add: true }); }
-  trail(p) { this.sprite(TEX.smoke, 0xe0dcd0, p.clone(), 0.45, 1.1, { vel: new THREE.Vector3(0, 0.3, 0), grow: 1.1, opacity: 0.55 }); }
-  sparks(p) { for (let i = 0; i < 8; i++) this.sprite(TEX.soft, 0xfff27a, p.clone(), 0.18, 0.4, { vel: new THREE.Vector3(rnd(-4, 4), rnd(1, 5), rnd(-4, 4)), add: true, grav: 10 }); }
+  fireOn(p) { this.sprite(TEX.flash, VFX.explosion.fire[0], p.clone().add(new THREE.Vector3(rnd(-0.3, 0.3), rnd(0.4, 1.7), rnd(-0.3, 0.3))), 0.5, 0.5, { vel: new THREE.Vector3(0, 1.5, 0), grow: 0.3, add: true }); }
+  trail(p) { this.sprite(TEX.smoke, 0x8a8680, p.clone(), 0.45, 1.1, { vel: new THREE.Vector3(0, 0.3, 0), grow: 1.1, opacity: 0.55 }); }
+  sparks(p) { for (let i = 0; i < 6; i++) this.sprite(TEX.soft, 0xffc27a, p.clone(), 0.12, 0.4, { vel: new THREE.Vector3(rnd(-4, 4), rnd(1, 5), rnd(-4, 4)), add: true, grav: 10 }); }
   update(dt) {
     for (let i = this.items.length - 1; i >= 0; i--) {
       const it = this.items[i]; it.life -= dt;

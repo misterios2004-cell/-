@@ -3,6 +3,7 @@ import { THREE, clamp, pick, Sound, Save, DEFAULT_SETTINGS } from './core.js';
 import { NATIONS, PLAYABLE_NATIONS, RANKS, LINES, WEAPONS, CATS, MISSIONS, REGIONS, REGION_BONUS, THEMES, INF } from './data.js';
 import * as MD from './models.js';
 import { Battle, aimDir } from './battle.js';
+import { FOX_BODY } from './models.js';
 import { weaponIcon } from './icons.js';
 
 const $ = (s, r = document) => r.querySelector(s);
@@ -91,8 +92,8 @@ export const UI = {
     const next = c ? MISSIONS.find(m => !c.done[m.id]) : null;
     this.show('title', `
       <div class="titleWrap">
-        <h1 class="logo">Свиньи<br>в&nbsp;<span>окопах</span></h1>
-        <p class="tag">Пошаговая война свиных армий: звания и повышения, инвентарь, техника, 13 операций кампании.</p>
+        <h1 class="logo">Лисьи <span>норы</span></h1>
+        <p class="tag">Пошаговая тактика. Отряды лис-солдат, звания и повышения, инвентарь, техника, разрушаемая местность, 13 операций кампании.</p>
         <nav class="menu">
           ${c ? `<button class="btn big" data-go="map">Продолжить кампанию<small>${esc(NATIONS[c.nation].name)} · ${next ? 'операция ' + next.id : 'кампания пройдена'}</small></button>` : ''}
           <button class="btn ${c ? '' : 'big'}" data-go="newCampaign">Новая кампания</button>
@@ -102,7 +103,7 @@ export const UI = {
           <button class="btn" data-go="help">Как играть</button>
         </nav>
       </div>
-      <p class="credit">Фанатская игра по мотивам Hogs of War (Infogrames, 2000). Не связана с правообладателями.</p>`);
+      <p class="credit">Механика вдохновлена Hogs of War (Infogrames, 2000). Проект не связан с правообладателями.</p>`);
   },
 
   /* ---------- новая кампания ---------- */
@@ -144,18 +145,19 @@ export const UI = {
     // регионы расположены слева направо, миссии — по три в регионе
     REGIONS.forEach((r, ri) => {
       const ms = MISSIONS.filter(m => m.region === r.id);
-      ms.forEach((m, k) => { pos[m.id] = { x: 90 + ri * 190 + (k - (ms.length - 1) / 2) * 52, y: 190 + (k % 2 ? -46 : 40) + (ri % 2 ? 30 : -10) }; });
+      ms.forEach((m, k) => { pos[m.id] = { x: 115 + ri * 190 + (k - (ms.length - 1) / 2) * 52, y: 190 + (k % 2 ? -46 : 40) + (ri % 2 ? 30 : -10) }; });
     });
     const path = MISSIONS.map(m => `${pos[m.id].x},${pos[m.id].y}`).join(' ');
-    const regionColors = { farm: '#6f8a3c', swamp: '#4f5f3a', snow: '#c9d3dc', desert: '#d8b878', lard: '#6b4a78' };
+    const regionColors = { farm: '#2c3424', swamp: '#23291f', snow: '#3a4148', desert: '#4a3f2c', ash: '#2e2529' };
     const svg = `<svg viewBox="0 0 1000 380" class="campmap" role="img" aria-label="Карта кампании">
-      <rect x="0" y="0" width="1000" height="380" fill="#35505a" rx="8"/>
-      ${REGIONS.map((r, ri) => `<g><ellipse cx="${90 + ri * 190}" cy="${190 + (ri % 2 ? 30 : -10)}" rx="100" ry="120" fill="${regionColors[r.theme]}" stroke="#241a11" stroke-width="3"/>
-        <text x="${90 + ri * 190}" y="${56 + (ri % 2 ? 30 : -10)}" text-anchor="middle" class="mapRegion">${esc(r.name)}</text></g>`).join('')}
-      <polyline points="${path}" fill="none" stroke="#241a11" stroke-width="4" stroke-dasharray="8 7"/>
+      <defs><pattern id="grid" width="40" height="40" patternUnits="userSpaceOnUse"><path d="M40 0H0V40" fill="none" stroke="rgba(214,205,186,.06)"/></pattern></defs>
+      <rect x="0" y="0" width="1000" height="380" fill="#11161a"/><rect x="0" y="0" width="1000" height="380" fill="url(#grid)"/>
+      ${REGIONS.map((r, ri) => `<g><ellipse cx="${115 + ri * 190}" cy="${190 + (ri % 2 ? 30 : -10)}" rx="100" ry="120" fill="${regionColors[r.theme]}" stroke="rgba(214,205,186,.22)" stroke-width="1.5"/>
+        <text x="${115 + ri * 190}" y="${56 + (ri % 2 ? 30 : -10)}" text-anchor="middle" class="mapRegion">${esc(r.name)}</text></g>`).join('')}
+      <polyline points="${path}" fill="none" stroke="rgba(196,122,52,.55)" stroke-width="1.5" stroke-dasharray="6 6"/>
       ${MISSIONS.map(m => { const p = pos[m.id], st = c.done[m.id] ? 'done' : avail(m) ? 'open' : 'locked';
         return `<g class="node ${st}" data-m="${m.id}" tabindex="${st === 'locked' ? -1 : 0}" role="button" aria-label="Операция ${m.id}: ${esc(m.name)}">
-          <circle cx="${p.x}" cy="${p.y}" r="22"/><text x="${p.x}" y="${p.y + 6}" text-anchor="middle">${c.done[m.id] ? '✓' : m.id}</text></g>`; }).join('')}
+          <circle cx="${p.x}" cy="${p.y}" r="17"/><text x="${p.x}" y="${p.y + 5}" text-anchor="middle">${String(m.id).padStart(2, '0')}</text></g>`; }).join('')}
     </svg>`;
     this.show('map', `
       <div class="card wide mapcard">
@@ -193,11 +195,11 @@ export const UI = {
           </div>
           <div class="enemies"><small>Силы противника:</small> ${Object.entries(counts).map(([r, n]) => `<span class="chip">${RANKS[r].name}${n > 1 ? ' ×' + n : ''}</span>`).join('')}${structs ? `<span class="chip">Техника: ${structs}</span>` : ''}${m.medals ? `<span class="chip gold">Медалей на карте: ${m.medals}</span>` : ''}</div>
           <h3>Отряд: ${chosen.size} из ${size}</h3>
-          <div class="roster">${c.roster.map(r => `<button class="hogcard ${chosen.has(r.id) ? 'on' : ''}" data-id="${r.id}" aria-pressed="${chosen.has(r.id)}">
+          <div class="roster">${c.roster.map(r => `<button class="unitcard ${chosen.has(r.id) ? 'on' : ''}" data-id="${r.id}" aria-pressed="${chosen.has(r.id)}">
               <img src="${portrait(c.nation, r.rank)}" alt=""><b>${esc(r.name)}</b><small>${RANKS[r.rank].name} · ${RANKS[r.rank].hp} HP</small></button>`).join('')}</div>
           <div class="row"><button class="btn big" id="go" ${chosen.size ? '' : 'disabled'}>В бой</button><button class="btn" data-go="barracks">Казарма</button><button class="btn" data-go="map">К карте</button></div>
         </div>`);
-      $$('.hogcard', this.scr).forEach(b => b.addEventListener('click', () => {
+      $$('.unitcard', this.scr).forEach(b => b.addEventListener('click', () => {
         const id = +b.dataset.id;
         if (chosen.has(id)) chosen.delete(id); else if (chosen.size < size) chosen.add(id); else return;
         Sound.play('click'); render();
@@ -209,7 +211,7 @@ export const UI = {
   enemyNation(m) {
     const c = Save.data.campaign;
     if (m.enemy !== c.nation) return m.enemy;
-    return PLAYABLE_NATIONS.find(n => n !== c.nation && n !== 'lard') || 'fr';
+    return PLAYABLE_NATIONS.find(n => n !== c.nation && n !== 'ash') || 'fr';
   },
   startCampaign(m, ids) {
     const c = Save.data.campaign, region = REGIONS.find(r => r.id === m.region);
@@ -218,8 +220,8 @@ export const UI = {
       mode: 'campaign', mission: m, missionId: m.id, turnTime: m.turnTime, wind: Save.data.settings.wind, crates: true, quality: this.quality(),
       map: { theme: region.theme, terrain: m.terrain, seed: m.seed, props: m.props },
       teams: [
-        { nation: c.nation, control: 'human', hogs: ids.map(id => { const r = c.roster.find(x => x.id === id); return { name: r.name, rank: r.rank, rosterId: id }; }) },
-        { nation: en, control: 'ai', ai: m.ai * DIFF[c.diff].k, hogs: m.enemies.map((r, i) => ({ name: m.boss === i ? 'Комендант ' + names[i] : names[i % names.length], rank: r, boss: m.boss === i })) },
+        { nation: c.nation, control: 'human', foxes: ids.map(id => { const r = c.roster.find(x => x.id === id); return { name: r.name, rank: r.rank, rosterId: id }; }) },
+        { nation: en, control: 'ai', ai: m.ai * DIFF[c.diff].k, foxes: m.enemies.map((r, i) => ({ name: m.boss === i ? 'Комендант ' + names[i] : names[i % names.length], rank: r, boss: m.boss === i })) },
       ],
     };
     this.startBattle(cfg);
@@ -243,7 +245,7 @@ export const UI = {
           <div class="bar"><div><div class="eyebrow">${esc(NATIONS[c.nation].name)}</div><h2>Казарма</h2></div>
             <div class="chips"><span class="chip gold">Очки повышения: <b>${c.pp}</b></span><button class="btn" data-go="map">К карте</button></div></div>
           <div class="barracks">
-            <div class="roster tall">${c.roster.map(x => `<button class="hogcard ${x.id === sel ? 'on' : ''}" data-id="${x.id}"><img src="${portrait(c.nation, x.rank)}" alt=""><b>${esc(x.name)}</b><small>${RANKS[x.rank].name}</small></button>`).join('')}</div>
+            <div class="roster tall">${c.roster.map(x => `<button class="unitcard ${x.id === sel ? 'on' : ''}" data-id="${x.id}"><img src="${portrait(c.nation, x.rank)}" alt=""><b>${esc(x.name)}</b><small>${RANKS[x.rank].name}</small></button>`).join('')}</div>
             <div class="detail">
               <div class="dhead"><img src="${portrait(c.nation, r.rank)}" alt="">
                 <div><input id="rename" maxlength="16" value="${esc(r.name)}" aria-label="Имя бойца"><div class="rank" style="--c:${LINES[rk.line].color}">${rk.name} · ${LINES[rk.line].name}</div>
@@ -254,7 +256,7 @@ export const UI = {
           </div>
           <details class="tree"><summary>Все ветки званий</summary>${this.treeHtml(r.rank)}</details>
         </div>`);
-      $$('.hogcard', this.scr).forEach(b => b.addEventListener('click', () => { sel = +b.dataset.id; Sound.play('click'); render(); }));
+      $$('.unitcard', this.scr).forEach(b => b.addEventListener('click', () => { sel = +b.dataset.id; Sound.play('click'); render(); }));
       $('#rename', this.scr).addEventListener('change', e => { r.name = e.target.value.trim() || r.name; Save.write(); });
       $$('[data-promo]', this.scr).forEach(b => b.addEventListener('click', () => {
         const nx = b.dataset.promo, cost = RANKS[nx].cost; if (c.pp < cost) return;
@@ -284,9 +286,9 @@ export const UI = {
           <div class="eyebrow">Схватка</div><h2>Настройка боя</h2>
           <div class="teams">${st.teams.map((t, i) => `<div class="teamrow" style="--c:${NATIONS[t.nation].css}">
             <b>Команда ${i + 1}</b>
-            <select data-t="${i}" data-k="nation" aria-label="Армия">${PLAYABLE_NATIONS.map(n => opt(n, t.nation, NATIONS[n].name)).join('')}${opt('lard', t.nation, NATIONS.lard.name)}</select>
+            <select data-t="${i}" data-k="nation" aria-label="Армия">${PLAYABLE_NATIONS.map(n => opt(n, t.nation, NATIONS[n].name)).join('')}${opt('ash', t.nation, NATIONS.ash.name)}</select>
             <select data-t="${i}" data-k="control" aria-label="Кто управляет">${opt('human', t.control, 'Игрок')}${opt('easy', t.control, 'ИИ: новобранец')}${opt('normal', t.control, 'ИИ: сержант')}${opt('hard', t.control, 'ИИ: генерал')}</select>
-            <select data-t="${i}" data-k="n" aria-label="Свиней">${[2, 3, 4, 5, 6].map(n => opt(n, t.n, n + ' свин.')).join('')}</select>
+            <select data-t="${i}" data-k="n" aria-label="Бойцов">${[2, 3, 4, 5, 6].map(n => opt(n, t.n, n + ' бойц.')).join('')}</select>
             ${st.teams.length > 2 ? `<button class="btn small" data-del="${i}" aria-label="Убрать команду">✕</button>` : ''}</div>`).join('')}
             ${st.teams.length < 4 ? '<button class="btn small" id="addTeam">+ Команда</button>' : ''}</div>
           <div class="grid2">
@@ -328,7 +330,7 @@ export const UI = {
       map: { theme: st.theme, terrain: st.terrain, seed: seed ?? (Math.random() * 1e9 | 0), props: { houses: 3, sandbags: 6, fences: 4, wire: st.terrain === 'trenches' ? 6 : 2, bridges: 3, mill: st.theme === 'farm' ? 1 : 0 } },
       teams: st.teams.map(t => {
         const names = [...NATIONS[t.nation].names].sort(() => Math.random() - 0.5);
-        return { nation: t.nation, control: t.control === 'human' ? 'human' : 'ai', ai: ctl[t.control] ?? 1.3, hogs: Array.from({ length: t.n }, (_, i) => ({ name: names[i % names.length], rank: this.rankPreset(st.ranks) })) };
+        return { nation: t.nation, control: t.control === 'human' ? 'human' : 'ai', ai: ctl[t.control] ?? 1.3, foxes: Array.from({ length: t.n }, (_, i) => ({ name: names[i % names.length], rank: this.rankPreset(st.ranks) })) };
       }),
     };
     this.lastSkirm = st;
@@ -373,12 +375,12 @@ export const UI = {
         <div class="helpcols">
           <div>
             <h3>Ход</h3>
-            <p>Армии ходят по очереди, за ход действует одна свинья. Пока идёт время хода, свинья может бегать, прыгать, плавать, подбирать ящики и садиться в технику. Выстрел заканчивает ход; лечение руками, самолечение, аптечка, ранец и карманная кража — нет.</p>
+            <p>Армии ходят по очереди, за ход действует один боец. Пока идёт время хода, боец может бегать, прыгать, идти вброд и плавать, подбирать ящики и садиться в технику. Выстрел заканчивает ход; лечение руками, самолечение, аптечка, ранец и карманная кража — нет.</p>
             <p>Стрелять можно только стоя на земле: не в прыжке и не в воде. Сила броска и выстрела из базуки, миномёта и гранат зависит от того, сколько держать «Огонь».</p>
             <h3>Звания</h3>
             <p>Все начинают рядовыми. За операции дают очки повышения: 1 за победу, 1 если все выжили, по 1 за найденную медаль и ${REGION_BONUS} за освобождённый регион. В казарме очки тратятся на повышение по одной из четырёх веток. После третьей ступени любая ветка ведёт в Коммандо, затем в Героя.</p>
             <h3>Опасности</h3>
-            <p>Зелёная вода отравляет. Отравление, как и горение, отнимает здоровье каждый ход, пока свинью не вылечат. Колючая проволока ранит и замедляет. Мины взрываются через секунду после того, как рядом прошла свинья. Красные бочки взрываются.</p>
+            <p>Зелёная вода отравляет. Отравление, как и горение, отнимает здоровье каждый ход, пока бойца не вылечат. Колючая проволока ранит и замедляет. Мины взрываются через секунду после того, как рядом прошёл боец. Красные бочки взрываются.</p>
           </div>
           <div>
             <h3>Клавиатура и мышь</h3>
@@ -400,7 +402,7 @@ export const UI = {
             <p>Джойстик слева — ходьба и повороты. Проведите пальцем по полю — наводка. Кнопки справа: огонь (удерживать), прыжок, бег, техника. Для авиаудара коснитесь точки на карте.</p>
           </div>
         </div>
-        <p class="note">Фанатская игра по мотивам Hogs of War (Infogrames, 2000). Не связана с правообладателями.</p>
+        <p class="note">Механика вдохновлена Hogs of War (Infogrames, 2000). Проект не связан с правообладателями.</p>
         <div class="row"><button class="btn" data-go="title">Назад</button></div>
       </div>`);
   },
@@ -413,7 +415,7 @@ export const UI = {
       mode: 'demo', turnTime: 18, wind: false, crates: true, quality: this.quality() === 'high' ? 'medium' : this.quality(),
       mission: { props: { houses: 2, sandbags: 4, fences: 3, crates: 3, barrels: 4 }, structures: [{ type: 'pillbox', side: 1 }] },
       map: { theme, terrain: pick(['hills', 'plateau', 'trenches']), seed: Math.random() * 1e9 | 0, props: { houses: 2, sandbags: 4, fences: 3, mill: theme === 'farm' ? 1 : 0 } },
-      teams: nations.slice(0, 2).map(n => ({ nation: n, control: 'ai', ai: 1.2, hogs: Array.from({ length: 3 }, () => ({ name: pick(NATIONS[n].names), rank: this.rankPreset('mixed') })) })),
+      teams: nations.slice(0, 2).map(n => ({ nation: n, control: 'ai', ai: 1.2, foxes: Array.from({ length: 3 }, () => ({ name: pick(NATIONS[n].names), rank: this.rankPreset('mixed') })) })),
     };
     this.demo = new Battle(this.renderer, cfg, { end: () => { setTimeout(() => { if (this.demo && !this.battle) { this.demo.dispose(); this.demo = null; this.startDemo(); } }, 3000); } });
     this.demo.introT = 1;
@@ -462,7 +464,7 @@ export const UI = {
   results(res) {
     const b = this.battle; if (!b || b.result !== res) return;
     const cfg = b.cfg;
-    const rows = res.hogs.filter(h => cfg.mode !== 'campaign' || h.team === 0).map(h => `<tr><td>${esc(h.name)}</td><td>${h.kills}</td><td>${h.dmg}</td><td>${h.alive ? 'в строю' : 'пал'}</td></tr>`).join('');
+    const rows = res.foxes.filter(h => cfg.mode !== 'campaign' || h.team === 0).map(h => `<tr><td>${esc(h.name)}</td><td>${h.kills}</td><td>${h.dmg}</td><td>${h.alive ? 'в строю' : 'пал'}</td></tr>`).join('');
     let extra = '', buttons = '';
     if (cfg.mode === 'campaign') {
       const c = Save.data.campaign, m = cfg.mission, first = !c.done[m.id];
@@ -474,7 +476,7 @@ export const UI = {
         extra = `<div class="pp">${parts.map(p => `<span>${p[0]}<b>+${p[1]}</b></span>`).join('')}<span class="tot">Итого очков<b>+${total}</b></span></div>`;
         buttons = `<button class="btn big" id="next">${MISSIONS.find(x => x.id === m.id + 1) ? 'К следующей операции' : 'Кампания пройдена!'}</button><button class="btn" id="bar">Казарма</button>`;
       } else buttons = `<button class="btn big" id="again">Ещё раз</button>`;
-      for (const h of res.hogs) if (h.team === 0 && h.rosterId != null) { const r = c.roster.find(x => x.id === h.rosterId); if (r) { r.kills += h.kills; r.missions++; } }
+      for (const h of res.foxes) if (h.team === 0 && h.rosterId != null) { const r = c.roster.find(x => x.id === h.rosterId); if (r) { r.kills += h.kills; r.missions++; } }
       Save.write();
       buttons += `<button class="btn" id="tomap">К карте</button>`;
     } else buttons = `<button class="btn big" id="rematch">Реванш</button><button class="btn" id="setup">Настроить бой</button><button class="btn" data-go="title">Меню</button>`;
@@ -568,7 +570,7 @@ export const UI = {
     for (const t of b.teams) {
       const el = E.teams.querySelector(`[data-t="${t.idx}"]`); if (!el) continue;
       el.classList.toggle('cur', !!h && h.team === t && !b.over);
-      const pips = t.hogs.map(o => `<b class="${o.alive ? '' : 'dead'} ${o === h ? 'act' : ''}" style="--f:${o.alive ? o.hp / o.maxHp : 0}"></b>`).join('');
+      const pips = t.foxes.map(o => `<b class="${o.alive ? '' : 'dead'} ${o === h ? 'act' : ''}" style="--f:${o.alive ? o.hp / o.maxHp : 0}"></b>`).join('');
       const i = el.querySelector('i'); if (i.innerHTML !== pips) i.innerHTML = pips;
     }
     const tsec = Math.max(0, Math.ceil(b.timer));
@@ -610,14 +612,14 @@ export const UI = {
     const b = this.battle, cam = b.camera, W = this.renderer.domElement.clientWidth, H = this.renderer.domElement.clientHeight;
     const v = new THREE.Vector3();
     const seen = new Set();
-    for (const h of b.hogs) {
+    for (const h of b.foxes) {
       let el = this.labelEls.get(h);
       if (!el) { el = document.createElement('div'); el.className = 'lbl'; el.innerHTML = '<span></span><i><b></b></i><em></em>'; this.labels.appendChild(el); this.labelEls.set(h, el); el.querySelector('b').style.background = h.team.nation.css; }
       seen.add(el);
       const ownFollow = h === b.active && b.isHuman(h.team) && b.state === 'turn' && b.camMode !== 'top';
       const visible = h.alive && !b.scope && !ownFollow && !(h.status.hidden && h.team !== b.active?.team && !b.isHuman(h.team));
       if (!visible) { el.style.display = 'none'; continue; }
-      const top = h.vehicle ? h.vehicle.pos.clone().setY(h.vehicle.pos.y + 3.4) : h.pos.clone().setY(h.pos.y + 2.25 * h.scale);
+      const top = h.vehicle ? h.vehicle.pos.clone().setY(h.vehicle.pos.y + 3.4) : h.pos.clone().setY(h.pos.y + (h.swim ? FOX_BODY.height - 1.1 : FOX_BODY.height + 0.35) * h.scale);
       v.copy(top).project(cam);
       if (v.z > 1 || v.z < -1 || Math.abs(v.x) > 1.2 || Math.abs(v.y) > 1.2) { el.style.display = 'none'; continue; }
       el.style.display = '';

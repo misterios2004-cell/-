@@ -1,6 +1,7 @@
 // Точка входа: рендерер, цикл кадров, приложение.
 import { THREE, Save } from './core.js';
-import { initTextures } from './models.js';
+import { initTextures, setMaterialQuality } from './models.js';
+import { applyUiTheme } from './theme.js';
 import { UI } from './ui.js';
 
 Save.load();
@@ -11,6 +12,9 @@ const q = Save.data.settings.quality;
 renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, q === 'low' ? 1 : touch ? 1.5 : 2));
 renderer.shadowMap.enabled = true;
 renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+// Кинематографичная тональная компрессия: мягкие света, глубокие тени.
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 1.05;
 
 function resize() {
   const w = canvas.clientWidth || innerWidth, h = canvas.clientHeight || innerHeight;
@@ -19,6 +23,8 @@ function resize() {
 }
 addEventListener('resize', resize);
 
+applyUiTheme();
+setMaterialQuality(q);
 initTextures();
 UI.init(renderer);
 window.__ui = UI; // для автотестов
@@ -33,7 +39,7 @@ function frame(now) {
 }
 requestAnimationFrame(frame);
 
-// Нативная оболочка (Android): полноэкранный режим.
+// Нативная оболочка (Android/iOS): полноэкранный режим.
 const Cap = window.Capacitor;
 if (Cap?.isNativePlatform?.()) {
   try { Cap.registerPlugin('StatusBar').hide().catch(() => {}); } catch (e) { /* плагин недоступен */ }

@@ -2,6 +2,7 @@
 import { THREE, clamp, smooth, mulberry, makeNoise, hash, rnd } from './core.js';
 import { THEMES } from './data.js';
 import * as MD from './models.js';
+import { VFX } from './theme.js';
 
 export const N = 129, SIZE = 160, HALF = SIZE / 2, CELL = SIZE / (N - 1), WATER_Y = 0;
 
@@ -117,7 +118,7 @@ export class World {
       sun.shadow.bias = -0.0008;
     }
     this.scene.add(sun);
-    this.flashLight = new THREE.PointLight(0xffa040, 0, 30, 2);
+    this.flashLight = new THREE.PointLight(VFX.explosion.lightColor, 0, 30, 2);
     this.scene.add(this.flashLight);
   }
   buildSky() {
@@ -132,7 +133,7 @@ export class World {
     sunSprite.position.set(-240, 300, 180); sunSprite.scale.setScalar(90); this.scene.add(sunSprite);
     this.clouds = [];
     for (let i = 0; i < 14; i++) {
-      const s = new THREE.Sprite(new THREE.SpriteMaterial({ map: MD.TEX.smoke, color: this.def.theme === 'lard' ? 0xc8a0b8 : 0xffffff, transparent: true, opacity: 0.8, fog: false, depthWrite: false }));
+      const s = new THREE.Sprite(new THREE.SpriteMaterial({ map: MD.TEX.smoke, color: this.def.theme === 'ash' ? 0x5a4a50 : 0xb8bcc0, transparent: true, opacity: 0.6, fog: false, depthWrite: false }));
       s.position.set(this.srnd(-200, 200), this.srnd(55, 90), this.srnd(-200, 200)); s.scale.set(this.srnd(30, 60), this.srnd(12, 20), 1);
       this.scene.add(s); this.clouds.push(s);
     }
@@ -218,7 +219,7 @@ export class World {
       this.wires.push({ x: s.x, z: s.z, hx: len / 2, hz: 0.5, rot, obj: w });
     }
     // деревья и камни
-    const treeCount = { farm: 40, swamp: 26, snow: 36, desert: 16, lard: 20 }[this.def.theme] ?? 30;
+    const treeCount = { farm: 40, swamp: 26, snow: 36, desert: 16, ash: 20 }[this.def.theme] ?? 30;
     for (let i = 0; i < treeCount; i++) {
       const s = this.findSpot([-72, 72], [-72, 72], 3, { maxSlope: 0.3 }); if (!s) continue;
       const type = th.trees[Math.floor(this.rng() * th.trees.length)];
@@ -252,7 +253,7 @@ export class World {
     const hz = this.heights[Math.min(N - 1, iz + 1) * N + ix] - this.heights[Math.max(0, iz - 1) * N + ix];
     const s = Math.hypot(hx, hz) / (2 * CELL), v = (hash(i) - 0.5) * 0.07;
     let c;
-    if (this.scorch[i]) c = [0.26, 0.19, 0.13];
+    if (this.scorch[i]) c = [0.09, 0.075, 0.06];
     else if (h < 0.6) c = th.sand;
     else if (s > 1.0) c = th.dirt;
     else if (h > 12) c = th.rock;
@@ -273,11 +274,11 @@ export class World {
     geo.setAttribute('color', new THREE.BufferAttribute(col, 3));
     geo.setAttribute('uv', new THREE.BufferAttribute(uv, 2));
     geo.setIndex(idx); geo.computeVertexNormals();
-    this.terrain = new THREE.Mesh(geo, new THREE.MeshLambertMaterial({ vertexColors: true, map: MD.TEX.ground }));
+    this.terrain = new THREE.Mesh(geo, MD.mat(0xffffff, { preset: 'terrain', vertexColors: true, map: MD.TEX.ground, normalMap: MD.TEX.groundNormal, normalScale: new THREE.Vector2(0.9, 0.9), unique: true }));
     this.terrain.receiveShadow = true;
     this.scene.add(this.terrain);
     // «юбка» под картой, чтобы не было видно края
-    const skirt = new THREE.Mesh(new THREE.PlaneGeometry(1200, 1200), new THREE.MeshLambertMaterial({ color: new THREE.Color(...this.theme.sand).multiplyScalar(0.5) }));
+    const skirt = new THREE.Mesh(new THREE.PlaneGeometry(1200, 1200), MD.mat(new THREE.Color(...this.theme.sand).multiplyScalar(0.4).getHex(), { preset: 'terrain' }));
     skirt.rotation.x = -Math.PI / 2; skirt.position.y = -12; this.scene.add(skirt);
   }
   crater(x, y, z, r) {
@@ -307,7 +308,7 @@ export class World {
     this.waterGeo = g;
     this.waterBase = Float32Array.from(g.attributes.position.array);
     const th = this.theme;
-    this.water = new THREE.Mesh(g, new THREE.MeshPhongMaterial({ color: th.water, transparent: true, opacity: th.poison ? 0.9 : 0.82, shininess: 90, specular: 0x88aaaa }));
+    this.water = new THREE.Mesh(g, new THREE.MeshPhongMaterial({ color: th.water, transparent: true, opacity: th.poison ? 0.92 : 0.86, shininess: 120, specular: 0x5a6a6a }));
     this.water.position.y = WATER_Y; this.water.receiveShadow = true;
     this.scene.add(this.water);
   }
@@ -369,7 +370,8 @@ export class World {
     for (const c of this.colliders) if (c.walk && y >= c.y1 - 0.75 && this.inFoot(c, x, z, 0.1) && c.y1 > h) h = c.y1;
     return h;
   }
-  blocked(x, z, y, height = 1.2, pad = 0.35) {
+  // Проверка вертикальной капсулы (рост height, радиус pad) против построек.
+  blocked(x, z, y, height = 1.82, pad = 0.34) {
     for (const c of this.colliders) {
       if (!this.inFoot(c, x, z, pad)) continue;
       if (y + height <= c.y0 || y >= c.y1 - 0.01) continue;

@@ -1,8 +1,8 @@
 {
-  "name": "svinyi-v-okopah",
-  "version": "2.0.0",
+  "name": "lisi-nory",
+  "version": "3.0.0",
   "private": true,
-  "description": "Пошаговая 3D-стратегия про свиней в окопах по мотивам Hogs of War",
+  "description": "Пошаговая 3D-тактика про отряды лис-солдат по мотивам механики Hogs of War",
   "scripts": {
     "serve": "python3 -m http.server 8080 --directory www",
     "android:add": "cap add android",
