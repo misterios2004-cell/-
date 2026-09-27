@@ -29,7 +29,9 @@ export class AI {
       case 'move': this.move(dt); break;
       case 'think2':
         if (this.t < 0.5) return;
-        this.moved = true; this.plan = this.evaluate(); this.startAim(); break;
+        this.moved = true; this.plan = this.evaluate();
+        if (!this.plan && h.swim && this.t < 8 && b.timer > 10) { const d = this.chooseMove(); if (d) { this.dest = d; this.stage = 'move'; this.t = 0; break; } }
+        this.startAim(); break;
       case 'aim': this.aim(dt); break;
       case 'charge':
         if (!b.charging) { b.endTurn(); this.stage = 'done'; break; }
@@ -96,6 +98,18 @@ export class AI {
   chooseMove() {
     const b = this.b, h = this.h;
     if (h.vehicle) return null;
+    // в воде — к ближайшему берегу, предпочитая сторону противника
+    if (h.swim) {
+      const foe = b.hogs.find(o => o.alive && o.team !== h.team);
+      let best = null, bestScore = Infinity;
+      for (let r = 3; r <= 24; r += 3) for (let k = 0; k < 16; k++) {
+        const a = k / 16 * Math.PI * 2, p = h.pos.clone().add(new THREE.Vector3(Math.sin(a) * r, 0, Math.cos(a) * r));
+        if (!b.world.inside(p.x, p.z) || b.world.groundAt(p.x, p.z) < 0.3) continue;
+        const s = r + (foe ? p.distanceTo(foe.pos) * 0.15 : 0);
+        if (s < bestScore) { bestScore = s; best = p; }
+      }
+      if (best) return { pos: best };
+    }
     const enemies = b.hogs.filter(o => o.alive && o.team !== h.team && !o.status.hidden);
     const v = b.vehicles.find(v => !v.dead && !v.occupant && v.pos.distanceTo(h.pos) < 26 && (v.nation === h.team.nation || v.pos.x * h.pos.x > 0));
     if (v) return { pos: v.pos, vehicle: v };
@@ -121,6 +135,7 @@ export class AI {
   /* ---------- оценка вариантов ---------- */
   evaluate() {
     const b = this.b, h = this.h, ai = h.team.ai;
+    if (h.swim && !h.vehicle) return null;
     this.buildBuckets();
     const enemies = b.hogs.filter(o => o.alive && o.team !== h.team && !o.status.hidden);
     const allies = b.hogs.filter(o => o.alive && o.team === h.team);

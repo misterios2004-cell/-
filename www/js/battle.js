@@ -355,7 +355,7 @@ export class Battle {
     if (a && !a.vehicle && this.isHuman(a.team) && this.input.fwd !== 0) { this.msg('Остановитесь, чтобы стрелять', 'warn'); return; }
     if (!this.canFire()) {
       const h = this.active;
-      if (h && h.swim && this.state === 'turn') this.msg('В воде стрелять нельзя', 'warn');
+      if (h && h.swim && this.state === 'turn' && this.isHuman(h.team)) this.msg('В воде стрелять нельзя', 'warn');
       return;
     }
     const w = this.currentWeapon();
