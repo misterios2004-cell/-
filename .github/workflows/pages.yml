@@ -10,6 +10,7 @@ on:
 
 permissions:
   contents: write
+  pages: write
 
 concurrency:
   group: pages
@@ -27,3 +28,15 @@ jobs:
           publish_branch: gh-pages
           force_orphan: true
           commit_message: "Веб-версия из ${{ github.sha }}"
+
+      - name: Включить GitHub Pages (если ещё не включён)
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          code=$(curl -s -o info.json -w '%{http_code}' -H "Authorization: Bearer $GH_TOKEN" -H "Accept: application/vnd.github+json" https://api.github.com/repos/${{ github.repository }}/pages)
+          echo "GET /pages -> $code"; cat info.json
+          if [ "$code" = "404" ]; then
+            curl -s -w '\nPOST /pages -> %{http_code}\n' -X POST -H "Authorization: Bearer $GH_TOKEN" -H "Accept: application/vnd.github+json" \
+              https://api.github.com/repos/${{ github.repository }}/pages -d '{"source":{"branch":"gh-pages","path":"/"}}'
+          fi
