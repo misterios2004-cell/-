@@ -1,7 +1,10 @@
 // Процедурные 3D-модели: лисы-солдаты (двуногий скелет), оружие, техника, постройки, растительность, ящики.
 // Материалы — PBR (MeshStandardMaterial) с предустановками из theme.js; на низком качестве — Lambert.
 import { THREE, rnd, clamp } from './core.js';
-import { MATERIALS, FOX_PALETTE } from './theme.js';
+import { MATERIALS, FOX_PALETTE, rarityOf } from './theme.js';
+import { heroKit, buildHeroArmor, buildHeroHelm, ornamentWeapon, bakeStatic, Cape, Aura, makeEnvironment } from './heroes.js';
+import { RANKS } from './data.js';
+const rankLevel = id => (RANKS[id] ? RANKS[id].level : 0);
 
 /* ================= текстуры, нарисованные на canvas ================= */
 function canvasTex(w, h, draw, repeat) {
@@ -52,11 +55,11 @@ export function initTextures() {
   TEX.fabricNormal = normalFromHeight(fabricH, 1.5, 3);
   // Мех: продольные пряди.
   const furH = heightCanvas(128, 128, (x, w, h) => {
-    x.fillStyle = '#c0c0c0'; x.fillRect(0, 0, w, h);
-    for (let i = 0; i < 1600; i++) { const v = 130 + Math.random() * 125 | 0, px = Math.random() * w, py = Math.random() * h; x.strokeStyle = `rgba(${v},${v},${v},.8)`; x.beginPath(); x.moveTo(px, py); x.lineTo(px + rnd(-1, 1), py + rnd(4, 10)); x.stroke(); }
+    x.fillStyle = '#d8d8d8'; x.fillRect(0, 0, w, h);
+    for (let i = 0; i < 1600; i++) { const v = 190 + Math.random() * 65 | 0, px = Math.random() * w, py = Math.random() * h; x.strokeStyle = `rgba(${v},${v},${v},.8)`; x.beginPath(); x.moveTo(px, py); x.lineTo(px + rnd(-1, 1), py + rnd(4, 10)); x.stroke(); }
   });
   TEX.fur = new THREE.CanvasTexture(furH); TEX.fur.wrapS = TEX.fur.wrapT = THREE.RepeatWrapping; TEX.fur.repeat.set(2, 2);
-  TEX.furNormal = normalFromHeight(furH, 2, 2);
+  TEX.furNormal = normalFromHeight(furH, 0.8, 2);
   TEX.soft = canvasTex(64, 64, (x) => {
     const g = x.createRadialGradient(32, 32, 0, 32, 32, 32);
     g.addColorStop(0, 'rgba(255,255,255,1)'); g.addColorStop(0.5, 'rgba(255,255,255,.4)'); g.addColorStop(1, 'rgba(255,255,255,0)');
@@ -120,23 +123,36 @@ let PBR = true;
 const matCache = new Map();
 // low — Lambert (быстро на слабых телефонах), иначе MeshStandardMaterial.
 export function setMaterialQuality(q) { const p = q !== 'low'; if (p !== PBR) { PBR = p; matCache.clear(); } }
+export const isPBR = () => PBR;
 export function mat(color, opts = {}) {
-  const { unique, preset, ...rest } = opts;
-  const key = color + (preset || '') + JSON.stringify(rest, (k, v) => (v && v.isTexture ? v.uuid : v));
+  const { unique, preset, rim, ...rest } = opts;
+  const key = color + (preset || '') + (rim ? 'r' + rim : '') + JSON.stringify(rest, (k, v) => (v && v.isTexture ? v.uuid : v));
   if (!unique && matCache.has(key)) return matCache.get(key);
   let m;
   if (PBR) {
     const p = MATERIALS[preset || 'gear'];
-    m = new THREE.MeshStandardMaterial({ color, roughness: p.roughness, metalness: p.metalness, ...rest });
+    m = new THREE.MeshStandardMaterial({ color, roughness: p.roughness, metalness: p.metalness, envMapIntensity: p.env ?? 0.3, ...rest });
+    if (rim) addRim(m, rim);
   } else {
-    const { normalMap, roughness, metalness, ...lam } = rest; void normalMap; void roughness; void metalness;
+    const { normalMap, roughness, metalness, envMapIntensity, ...lam } = rest; void normalMap; void roughness; void metalness; void envMapIntensity;
     m = new THREE.MeshLambertMaterial({ color, ...lam });
   }
   if (!unique) matCache.set(key, m);
   return m;
 }
+// Контровой свет по Френелю: светлая кайма по силуэту, как на «глянцевых» героях RPG.
+function addRim(m, color) {
+  const c = new THREE.Color(color);
+  m.onBeforeCompile = sh => {
+    sh.uniforms.rimColor = { value: c };
+    sh.fragmentShader = 'uniform vec3 rimColor;\n' + sh.fragmentShader.replace('#include <tonemapping_fragment>',
+      'float rimF = 1.0 - clamp(dot(normalize(normal), normalize(vViewPosition)), 0.0, 1.0);\n' +
+      'gl_FragColor.rgb += rimColor * (rimF * rimF * rimF);\n#include <tonemapping_fragment>');
+  };
+  m.customProgramCacheKey = () => 'rim' + color;
+}
 const G = {};
-function geo() {
+export function geo() {
   if (G.sphere) return G;
   G.sphere = new THREE.SphereGeometry(1, 18, 14);
   G.sphereLo = new THREE.SphereGeometry(1, 8, 6);
@@ -153,7 +169,7 @@ function geo() {
   G.snout = new THREE.ConeGeometry(1, 1, 14).rotateX(Math.PI / 2); // остриё вдоль +z
   return G;
 }
-function M(g, material, x = 0, y = 0, z = 0, sx = 1, sy = sx, sz = sx) {
+export function M(g, material, x = 0, y = 0, z = 0, sx = 1, sy = sx, sz = sx) {
   const m = new THREE.Mesh(g, material); m.position.set(x, y, z); m.scale.set(sx, sy, sz); m.castShadow = true; m.receiveShadow = true; return m;
 }
 const shade = (hex, k) => new THREE.Color(hex).multiplyScalar(k).getHex();
@@ -168,7 +184,7 @@ const ACTION_TIME = { attack: 0.45, throw: 0.6, fire: 0.18, hit: 0.4, place: 0.7
 // Оружие, которое держат двумя руками у груди; остальное — в правой руке.
 const TWO_HANDED = new Set(['rifle', 'rifleburst', 'tranq', 'sniper', 'mg', 'hmg', 'shotgun', 'supershotgun', 'bazooka', 'airburst', 'firerain', 'mortar', 'flamethrower', 'meddart']);
 
-const POSE_KEYS = ['pelvisY', 'spineX', 'spineY', 'neckX', 'headY', 'shLX', 'shLZ', 'elL', 'shRX', 'shRZ', 'elR', 'hipL', 'hipR', 'knL', 'knR', 'tailX', 'tailY', 'rootX', 'rootZ', 'lift'];
+const POSE_KEYS = ['pelvisY', 'spineX', 'spineY', 'neckX', 'headY', 'shLX', 'shLZ', 'elL', 'shRX', 'shRZ', 'elR', 'hipL', 'hipR', 'knL', 'knR', 'tailX', 'tailY', 'rootX', 'rootZ', 'lift', 'hipLZ', 'hipRZ'];
 
 export class BipedalFox {
   constructor(nation, rankId, rankLine) {
@@ -176,30 +192,26 @@ export class BipedalFox {
     this.nation = nation; this.rankId = rankId; this.line = rankLine;
     const P = FOX_PALETTE;
     const root = this.root = new THREE.Group();
-    const fur = mat(P.fur, { preset: 'fur', map: TEX.fur, normalMap: TEX.furNormal });
-    const furDark = mat(P.furDark, { preset: 'fur', map: TEX.fur });
-    const furLight = mat(P.furLight, { preset: 'fur', map: TEX.fur, normalMap: TEX.furNormal });
+    const k = this.kit = heroKit(nation, rankLevel(rankId), rankLine);
+    const fur = mat(P.fur, { preset: 'fur', map: TEX.fur, rim: 0x4a3a2e });
+    const furDark = mat(P.furDark, { preset: 'fur', map: TEX.fur, rim: 0x4a3a2e });
+    const furLight = mat(P.furLight, { preset: 'fur', map: TEX.fur, rim: 0x4a3a2e });
     const socks = mat(P.socks, { preset: 'fur', map: TEX.fur });
-    const uni = this.uniMat = mat(nation.color, { preset: 'fabric', map: TEX.fabric, normalMap: TEX.fabricNormal, unique: true });
-    const trousers = mat(shade(nation.color, 0.78), { preset: 'fabric', map: TEX.fabric, normalMap: TEX.fabricNormal });
-    const boots = mat(P.boots, { preset: 'leather' }), belt = mat(P.belt, { preset: 'leather' });
-    const vest = mat(P.vest, { preset: 'gear', map: TEX.fabric, normalMap: TEX.fabricNormal }), pouch = mat(P.pouch, { preset: 'gear', map: TEX.fabric });
-    const eyeM = mat(P.eye, { preset: 'eye' }), pupil = mat(P.pupil, { preset: 'eye' }), nose = mat(P.nose, { preset: 'eye' }), inner = mat(P.innerEar, { preset: 'fur' });
+    this.uniMat = k.cloth;
+    const trousers = k.cloth2;
+    const boots = mat(P.boots, { preset: 'leather' });
+    const eyeM = k.glowEye ? mat(k.rar.glow, { preset: 'gem', emissive: k.rar.glow, emissiveIntensity: 1.8 }) : mat(P.eye, { preset: 'eye', emissive: P.eye, emissiveIntensity: 0.25 });
+    const pupil = mat(P.pupil, { preset: 'eye' }), nose = mat(P.nose, { preset: 'eye' }), inner = mat(P.innerEar, { preset: 'fur' });
     const j = this.j = {};
 
     // таз — корень скелета
     const pelvis = j.pelvis = new THREE.Group(); pelvis.position.y = FOX_BODY.pelvis; root.add(pelvis);
     pelvis.add(M(G.sphere, trousers, 0, 0.02, 0, 0.17, 0.12, 0.12));
-    pelvis.add(M(G.cyl, belt, 0, 0.08, 0, 0.172, 0.05, 0.128));
-    pelvis.add(M(G.box, pouch, 0.12, 0.05, -0.1, 0.07, 0.09, 0.05));
-    pelvis.add(M(G.box, pouch, -0.13, 0.05, 0.02, 0.05, 0.1, 0.08)); // кобура/подсумок на бедре
-    // ноги: бедро → колено → голень → ботинок
-    for (const [s, k] of [[1, 'L'], [-1, 'R']]) {
-      const hip = j['hip' + k] = new THREE.Group(); hip.position.set(s * 0.095, -0.02, 0); pelvis.add(hip);
+    // ноги: бедро → колено → голень → сапог
+    for (const [s, key] of [[1, 'L'], [-1, 'R']]) {
+      const hip = j['hip' + key] = new THREE.Group(); hip.position.set(s * 0.095, -0.02, 0); pelvis.add(hip);
       hip.add(M(G.limb, trousers, 0, -0.22, 0, 0.078, 0.44, 0.084));
-      hip.add(M(G.box, pouch, s * 0.07, -0.2, 0.02, 0.03, 0.1, 0.08)); // карман
-      const knee = j['kn' + k] = new THREE.Group(); knee.position.set(0, -0.44, 0); hip.add(knee);
-      knee.add(M(G.sphere, trousers, 0, 0, 0.01, 0.07, 0.07, 0.075)); // наколенник
+      const knee = j['kn' + key] = new THREE.Group(); knee.position.set(0, -0.44, 0); hip.add(knee);
       knee.add(M(G.limb, trousers, 0, -0.18, 0, 0.064, 0.36, 0.066));
       knee.add(M(G.cyl, boots, 0, -0.37, 0, 0.07, 0.13, 0.072));
       knee.add(M(G.box, boots, 0, -0.44, 0.045, 0.11, 0.08, 0.23));
@@ -208,64 +220,54 @@ export class BipedalFox {
     // хвост: цепочка сегментов, пушистый, кончик светлый
     const tail = j.tail = new THREE.Group(); tail.position.set(0, 0.02, -0.11); pelvis.add(tail);
     let parent = tail; j.tailSeg = [];
-    const tailR = [0.06, 0.085, 0.095, 0.085, 0.06];
+    const tailR = [0.065, 0.095, 0.108, 0.098, 0.07];
     for (let i = 0; i < 5; i++) {
       const seg = new THREE.Group(); if (i) seg.position.z = -0.13; parent.add(seg); j.tailSeg.push(seg);
-      seg.add(M(G.sphere, i === 4 ? furLight : i === 3 ? furDark : fur, 0, 0, -0.07, tailR[i], tailR[i] * 0.95, 0.1));
+      seg.add(M(G.sphere, i === 4 ? furLight : i === 3 ? furDark : fur, 0, 0, -0.07, tailR[i], tailR[i] * 0.95, 0.105));
       parent = seg;
     }
-    // позвоночник: торс, разгрузка, шея, голова
+    // позвоночник: корпус под доспехом, шея, голова
     const spine = j.spine = new THREE.Group(); spine.position.y = 0.1; pelvis.add(spine);
-    spine.add(M(new THREE.CylinderGeometry(0.2, 0.165, 0.46, 16), uni, 0, 0.22, 0, 1, 1, 0.72));
-    spine.add(M(G.sphere, uni, 0, 0.4, 0, 0.21, 0.08, 0.15)); // плечевой пояс
-    spine.add(M(G.box, vest, 0, 0.25, 0.005, 0.37, 0.32, 0.25));
-    for (const x of [-0.11, 0, 0.11]) spine.add(M(G.box, pouch, x, 0.17, 0.135, 0.085, 0.1, 0.045));
-    spine.add(M(G.box, pouch, 0.1, 0.33, 0.13, 0.06, 0.07, 0.03)); // рация
-    spine.add(M(G.cyl, mat(0x111111, { preset: 'metal' }), -0.11, 0.52, -0.2, 0.006, 0.3, 0.006)); // антенна рации на ранце
-    spine.add(M(G.box, mat(0x2e2a22, { preset: 'gear', map: TEX.fabric }), 0, 0.28, -0.17, 0.3, 0.3, 0.12)); // ранец
-    spine.add(M(G.sphere, furLight, 0, 0.44, 0.075, 0.06, 0.04, 0.03)); // белая грудка у ворота
-    spine.add(M(G.cyl, uni, 0, 0.45, 0, 0.11, 0.05, 0.095)); // воротник
-    // знаки различия
-    if (rankLine === 'officer') for (const s of [-1, 1]) spine.add(M(G.box, mat(0x8a7440, { preset: 'metal' }), s * 0.16, 0.44, 0, 0.07, 0.012, 0.1));
     const neck = j.neck = new THREE.Group(); neck.position.y = 0.47; spine.add(neck);
-    neck.add(M(G.cyl, fur, 0, 0.04, 0, 0.058, 0.1, 0.058));
+    neck.add(M(G.cyl, fur, 0, 0.04, 0, 0.062, 0.1, 0.062));
+    neck.add(M(G.sphere, furLight, 0, 0.03, 0.035, 0.06, 0.07, 0.04)); // светлая грудка
     const head = this.head = j.head = new THREE.Group(); head.position.set(0, 0.12, 0.02); neck.add(head);
     head.add(M(G.sphere, fur, 0, 0, -0.005, 0.118, 0.112, 0.128));
-    const cheek = mat(0xb8aa92, { preset: 'fur', map: TEX.fur });
-    for (const s of [-1, 1]) head.add(M(G.sphere, cheek, s * 0.085, -0.05, 0.02, 0.04, 0.034, 0.05)); // «баки»
+    const cheek = mat(0xd4c6ae, { preset: 'fur', map: TEX.fur, rim: 0x4a3a2e });
+    for (const s of [-1, 1]) head.add(M(G.sphere, cheek, s * 0.085, -0.048, 0.02, 0.042, 0.034, 0.05)); // «баки»
     head.add(M(G.snout, fur, 0, -0.035, 0.17, 0.066, 0.056, 0.25)); // вытянутая морда
     head.add(M(G.snout, cheek, 0, -0.062, 0.14, 0.046, 0.026, 0.17)); // светлая нижняя челюсть
+    head.add(M(G.box, furDark, 0, -0.012, 0.19, 0.012, 0.012, 0.16)); // тёмная полоса по переносице
     head.add(M(G.sphere, nose, 0, -0.03, 0.292, 0.016, 0.013, 0.014));
     this.eyes = []; this.pupils = [];
     for (const s of [-1, 1]) {
-      const e = M(G.sphere, eyeM, s * 0.056, 0.024, 0.098, 0.023, 0.014, 0.012); e.rotation.y = s * 0.4; head.add(e); this.eyes.push(e);
-      const p = M(G.box, pupil, s * 0.059, 0.024, 0.109, 0.004, 0.013, 0.003); p.rotation.y = s * 0.4; head.add(p); this.pupils.push(p);
-      const brow = M(G.box, furDark, s * 0.055, 0.045, 0.1, 0.05, 0.011, 0.02); brow.rotation.z = -s * 0.22; head.add(brow);
+      const e = M(G.sphere, eyeM, s * 0.056, 0.024, 0.098, 0.025, 0.015, 0.012); e.rotation.y = s * 0.4; e.userData.dynamic = true; head.add(e); this.eyes.push(e);
+      const p = M(G.box, pupil, s * 0.059, 0.024, 0.109, 0.004, 0.013, 0.003); p.rotation.y = s * 0.4; p.userData.dynamic = true; head.add(p); this.pupils.push(p);
+      const brow = M(G.box, furDark, s * 0.055, 0.047, 0.1, 0.055, 0.012, 0.02); brow.rotation.z = -s * 0.26; head.add(brow);
+      head.add(M(G.box, socks, s * 0.074, 0.018, 0.1, 0.03, 0.005, 0.012).rotateZ(s * 0.35)); // подводка глаз
     }
     this.ears = [];
     for (const s of [-1, 1]) {
-      const ear = new THREE.Group(); ear.position.set(s * 0.066, 0.095, -0.02); ear.rotation.z = -s * 0.28; ear.rotation.x = -0.1;
+      // под шлемом уши выходят через прорези в куполе, поэтому основание поднято
+      const ear = new THREE.Group(); ear.position.set(s * (k.helmeted ? 0.078 : 0.066), k.helmeted ? 0.15 : 0.095, -0.02); ear.rotation.z = -s * 0.28; ear.rotation.x = -0.1;
       ear.add(M(G.cone, fur, 0, 0.085, 0, 0.052, 0.18, 0.024));
       ear.add(M(G.cone, inner, 0, 0.078, 0.009, 0.036, 0.13, 0.01));
       ear.add(M(G.cone, socks, 0, 0.16, 0, 0.022, 0.05, 0.012));
       head.add(ear); this.ears.push(ear);
     }
-    head.add(buildHelmet(nation, rankLine));
+    head.add(buildHeroHelm(nation, k));
     // руки: плечо → локоть → предплечье → кисть (тёмные «чулки»)
-    for (const [s, k] of [[1, 'L'], [-1, 'R']]) {
-      const sh = j['sh' + k] = new THREE.Group(); sh.position.set(s * 0.225, 0.4, 0); spine.add(sh);
-      sh.add(M(G.sphere, uni, 0, -0.01, 0, 0.068, 0.068, 0.068));
-      sh.add(M(G.limb, uni, 0, -0.14, 0, 0.058, 0.28, 0.058));
-      if (rankLine === 'medic' && s === 1) {
-        sh.add(M(G.cyl, mat(0xc9c4b8, { preset: 'fabric' }), 0, -0.1, 0, 0.061, 0.07, 0.061));
-        sh.add(M(G.box, mat(0x8e2a20, { preset: 'fabric' }), 0.061, -0.1, 0, 0.004, 0.045, 0.015));
-        sh.add(M(G.box, mat(0x8e2a20, { preset: 'fabric' }), 0.061, -0.1, 0, 0.004, 0.015, 0.045));
-      }
-      const el = j['el' + k] = new THREE.Group(); el.position.set(0, -0.28, 0); sh.add(el);
-      el.add(M(G.limb, uni, 0, -0.1, 0, 0.05, 0.2, 0.05));
+    for (const [s, key] of [[1, 'L'], [-1, 'R']]) {
+      const sh = j['sh' + key] = new THREE.Group(); sh.position.set(s * 0.225, 0.4, 0); spine.add(sh);
+      sh.add(M(G.sphere, k.cloth, 0, -0.01, 0, 0.068, 0.068, 0.068));
+      const el = j['el' + key] = new THREE.Group(); el.position.set(0, -0.28, 0); sh.add(el);
       el.add(M(G.cyl, socks, 0, -0.22, 0, 0.044, 0.06, 0.044));
       el.add(M(G.sphere, socks, 0, -0.27, 0.012, 0.045, 0.05, 0.04));
     }
+    const arm = buildHeroArmor(j, k);
+    this.tabard = arm.tabard;
+    this.cape = new Cape(k); this.cape.mesh.position.set(0, 0.445, -0.175); spine.add(this.cape.mesh);
+    if (k.level >= 4) { this.aura = new Aura(k); root.add(this.aura.group); }
     // точка крепления оружия (у груди) и ранца
     this.gunPivot = new THREE.Group(); this.gunPivot.position.set(-0.08, 0.3, 0.16); spine.add(this.gunPivot);
     this.backPivot = new THREE.Group(); this.backPivot.position.set(0, 0.3, -0.2); spine.add(this.backPivot);
@@ -274,6 +276,10 @@ export class BipedalFox {
     this.state = FoxAnim.IDLE; this.action = null; this.t = rnd(0, 10); this.phase = 0; this.blinkT = rnd(1, 4); this.lookT = 0; this.lookYaw = 0;
     this.pose = Object.fromEntries(POSE_KEYS.map(k => [k, 0])); this.pose.pelvisY = FOX_BODY.pelvis;
     this.bush = null;
+    // запекаем статичные детали каждого сустава в один меш на материал
+    const stops = new Set([...Object.values(j).flat(), ...this.ears, this.gunPivot, this.backPivot, this.tabard, this.cape.mesh]);
+    if (this.aura) stops.add(this.aura.group);
+    for (const n of [root, ...stops]) if (!n.userData.dynamic) bakeStatic(n, stops);
     root.traverse(o => { if (o.isMesh) o.userData.foxPart = true; });
   }
   setWeapon(id) {
@@ -283,6 +289,7 @@ export class BipedalFox {
     this.gunPivot.position.set(this.twoHanded ? -0.08 : -0.2, this.twoHanded ? 0.3 : 0.22, this.twoHanded ? 0.16 : 0.24);
     if (!id) return;
     const w = buildWeaponModel(id);
+    ornamentWeapon(w.hand, this.kit);
     if (w.back) this.backPivot.add(w.back);
     if (w.hand) this.gunPivot.add(w.hand);
   }
@@ -353,8 +360,15 @@ export class BipedalFox {
         T.neckX = -pitch * 0.5 - 0.05; T.headY = 0.12;
         if (armed) armedArms(); else { T.shLX = T.shRX = -0.1; T.shLZ = -0.1; T.shRZ = 0.1; T.elL = T.elR = -0.3; }
         break;
+      case 'pose': // витрина героя: широкая стойка, грудь вперёд, оружие наготове
+        T.hipLZ = 0.16; T.hipRZ = -0.1; T.hipL = -0.12; T.hipR = 0.1; T.knL = 0.2; T.knR = 0.08; T.pelvisY = FOX_BODY.pelvis - 0.035;
+        T.spineX = -0.04 + Math.sin(t * 2.1) * 0.01; T.spineY = 0.22; T.neckX = -0.08; T.headY = -0.3;
+        if (armed) { armedArms(); T.shRX += 0.55; T.shLX += 0.55; T.shRZ += 0.1; }
+        else { T.shLZ = -0.25; T.shRZ = 0.25; T.elL = T.elR = -0.35; }
+        T.tailY = 0.5;
+        break;
       default: // IDLE
-        T.spineX = 0.02 + Math.sin(t * 2.1) * 0.015; T.hipL = 0.04; T.hipR = -0.05; T.knL = 0.06; T.knR = 0.1;
+        T.spineX = 0.02 + Math.sin(t * 2.1) * 0.015; T.hipL = 0.04; T.hipR = -0.05; T.knL = 0.06; T.knR = 0.1; T.hipLZ = 0.05; T.hipRZ = -0.05;
         T.headY = this.lookYaw;
         if (armed) { armedArms(); T.shRX += 0.35; T.shLX += 0.35; } // оружие опущено в «готовность»
         else { T.shLZ = -0.1; T.shRZ = 0.1; T.elL = T.elR = -0.15; }
@@ -392,7 +406,7 @@ export class BipedalFox {
     j.neck.rotation.x = P.neckX; j.head.rotation.y = P.headY;
     j.shL.rotation.set(P.shLX, 0, P.shLZ); j.shR.rotation.set(P.shRX, 0, P.shRZ);
     j.elL.rotation.x = P.elL; j.elR.rotation.x = P.elR;
-    j.hipL.rotation.x = P.hipL; j.hipR.rotation.x = P.hipR; j.knL.rotation.x = P.knL; j.knR.rotation.x = P.knR;
+    j.hipL.rotation.set(P.hipL, 0, P.hipLZ); j.hipR.rotation.set(P.hipR, 0, P.hipRZ); j.knL.rotation.x = P.knL; j.knR.rotation.x = P.knR;
     j.tail.rotation.set(P.tailX, P.tailY, 0);
     j.tailSeg.forEach((s, i) => { if (i) { s.rotation.x = 0.16 + Math.sin(this.t * 2 + i) * 0.04; s.rotation.y = P.tailY * 0.3; } });
     this.root.rotation.x = P.rootX; this.root.rotation.z = P.rootZ;
@@ -402,7 +416,13 @@ export class BipedalFox {
     this.blinkT -= dt;
     const closed = state === FoxAnim.SLEEP || state === FoxAnim.DEATH || (this.blinkT < 0 && this.blinkT > -0.12);
     if (this.blinkT < -0.12) this.blinkT = rnd(2.5, 6);
-    this.eyes.forEach(e => { e.scale.y = closed ? 0.002 : 0.014; });
+    this.eyes.forEach(e => { e.scale.y = closed ? 0.002 : 0.015; });
+    // плащ, табард и аура
+    const move = state === FoxAnim.RUN ? 1 : state === FoxAnim.WALK ? 0.4 : state === FoxAnim.AIR ? 0.8 : 0;
+    this.capeMove = (this.capeMove || 0) + (move - (this.capeMove || 0)) * Math.min(1, dt * 4);
+    if (this.cape.mesh.visible) this.cape.update(this.t, this.capeMove);
+    this.tabard.rotation.x = Math.min(0, Math.min(P.hipL, P.hipR)) * 0.85;
+    if (this.aura) { this.aura.update(this.t, dt); this.aura.group.visible = state !== FoxAnim.DEATH && state !== FoxAnim.SWIM && state !== FoxAnim.SLEEP; }
     this.pupils.forEach(p => { p.visible = !closed; });
     // оружие следует за наводкой, отдача при выстреле
     this.gunPivot.rotation.x = -pitch + (armed ? 0 : 0);
@@ -411,47 +431,6 @@ export class BipedalFox {
     this.gunPivot.children.forEach(c => { c.position.z = -recoil; });
     this.gunPivot.visible = state !== FoxAnim.SWIM && state !== FoxAnim.SLEEP && state !== FoxAnim.DEATH;
   }
-}
-
-/* ================= шлемы и головные уборы ================= */
-function buildHelmet(nation, line) {
-  const g = new THREE.Group(), hat = nation.hat;
-  const steel = c => mat(c, { preset: 'helmet' }), cloth = c => mat(c, { preset: 'fabric', map: TEX.fabric });
-  const strap = mat(0x1e1a14, { preset: 'leather' });
-  g.position.set(0, 0.062, -0.012);
-  const chin = () => { for (const s of [-1, 1]) g.add(M(G.box, strap, s * 0.105, -0.06, 0.02, 0.008, 0.12, 0.012)); };
-  switch (hat) {
-    case 'brodie': g.add(M(G.cyl, steel(0x3e4430), 0, 0.035, 0, 0.2, 0.012, 0.2)); g.add(M(G.dome, steel(0x3e4430), 0, 0.035, 0, 0.135, 0.095, 0.145)); chin(); break;
-    case 'adrian': g.add(M(G.dome, steel(0x3a4150), 0, 0.06, 0, 0.14, 0.12, 0.15)); g.add(M(G.cyl, steel(0x3a4150), 0, 0.06, 0.01, 0.17, 0.01, 0.18)); g.add(M(G.box, steel(0x3a4150), 0, 0.18, 0, 0.012, 0.03, 0.16)); chin(); break;
-    case 'stahlhelm': {
-      const m = steel(0x3c3f40);
-      g.add(M(G.dome, m, 0, 0.055, 0, 0.145, 0.13, 0.16));
-      g.add(M(new THREE.CylinderGeometry(1, 1.12, 1, 18, 1, true), m, 0, 0.03, -0.01, 0.145, 0.06, 0.16));
-      chin(); break;
-    }
-    case 'm1': { const m = steel(0x4a4a34); g.add(M(G.dome, m, 0, 0.05, 0, 0.15, 0.13, 0.16)); g.add(M(G.cyl, m, 0, 0.05, 0.01, 0.158, 0.012, 0.168)); g.add(M(G.sphere, mat(0x2a2a20, { preset: 'fabric' }), 0, 0.07, 0, 0.152, 0.11, 0.162)); chin(); break; }
-    case 'ushanka': {
-      const f = mat(0x3a342e, { preset: 'fur', map: TEX.fur });
-      g.add(M(G.cyl, f, 0, 0.07, 0, 0.14, 0.11, 0.145)); g.add(M(G.dome, f, 0, 0.12, 0, 0.14, 0.05, 0.145));
-      g.add(M(G.box, f, 0, 0.08, 0.13, 0.2, 0.06, 0.04));
-      for (const s of [-1, 1]) g.add(M(G.box, f, s * 0.14, 0.0, 0, 0.035, 0.12, 0.11));
-      g.add(M(G.cone, mat(0x7a2418, { preset: 'metal' }), 0, 0.085, 0.155, 0.025, 0.006, 0.025).rotateX(Math.PI / 2));
-      break;
-    }
-    case 'type90': { const m = steel(0x4e4632); g.add(M(G.dome, m, 0, 0.055, 0, 0.145, 0.12, 0.155)); g.add(M(G.box, cloth(0x4a4230), 0, -0.02, -0.12, 0.2, 0.12, 0.02)); chin(); break; }
-    case 'visor': { // Орден Пепла: чёрный шлем с узкой красной щелью визора
-      const m = steel(0x17161a);
-      g.add(M(G.dome, m, 0, 0.045, -0.005, 0.15, 0.13, 0.16));
-      g.add(M(G.cyl, m, 0, 0.04, 0, 0.152, 0.03, 0.162));
-      for (const s of [-1, 1]) g.add(M(G.box, m, s * 0.13, -0.04, 0.02, 0.025, 0.1, 0.1)); // щёчные пластины
-      g.add(M(G.box, mat(0x1a0706, { preset: 'eye', emissive: 0x280403 }), 0, -0.04, 0.125, 0.17, 0.03, 0.02)); // тёмный визор на уровне глаз
-      break;
-    }
-    default: g.add(M(G.dome, steel(0x3e4430), 0, 0.06, 0, 0.14, 0.12, 0.15));
-  }
-  if (line === 'medic') { g.add(M(G.cyl, cloth(0xc9c4b8), 0, 0.09, 0, 0.152, 0.03, 0.162)); g.add(M(G.box, mat(0x8e2a20, { preset: 'fabric' }), 0, 0.09, 0.163, 0.04, 0.014, 0.005)); g.add(M(G.box, mat(0x8e2a20, { preset: 'fabric' }), 0, 0.09, 0.163, 0.014, 0.03, 0.005)); }
-  if (line === 'spy') g.add(M(G.box, mat(0x1a1c1a, { preset: 'eye' }), 0, 0.03, 0.15, 0.15, 0.04, 0.02)); // тактические очки
-  return g;
 }
 
 /* ================= оружие ================= */
@@ -511,7 +490,7 @@ export function buildGrave(nation) {
   const rifle = mat(0x1e2022, { preset: 'gunmetal' }), stock = mat(0x2a2c24, { preset: 'gear' });
   g.add(M(G.box, rifle, 0, 0.45, 0, 0.03, 0.9, 0.04));
   g.add(M(G.box, stock, 0, 0.95, 0, 0.05, 0.28, 0.1));
-  const helm = buildHelmet(nation, 'base'); helm.position.set(0, 1.02, 0); helm.scale.setScalar(1.05); g.add(helm);
+  const helm = buildHeroHelm(nation, heroKit(nation, 0, 'base')); helm.position.set(0, 1.02, 0); helm.scale.setScalar(1.05); g.add(helm);
   const tags = mat(0x7a7e82, { preset: 'metal' });
   g.add(M(G.box, tags, 0.03, 0.72, 0.03, 0.002, 0.05, 0.03));
   return g;
@@ -765,29 +744,41 @@ export function buildTree(type) {
   return g;
 }
 
-/* ================= портреты для меню: погрудный план ================= */
-let portraitRenderer = null, portraitScene = null, portraitCam = null;
-export function renderPortrait(nation, rankId, rankLine, size = 128) {
-  if (!portraitRenderer) {
-    const c = document.createElement('canvas');
-    portraitRenderer = new THREE.WebGLRenderer({ canvas: c, antialias: true, alpha: true, preserveDrawingBuffer: true });
-    portraitRenderer.toneMapping = THREE.ACESFilmicToneMapping; portraitRenderer.toneMappingExposure = 1.15;
-    portraitScene = new THREE.Scene();
-    portraitScene.add(new THREE.HemisphereLight(0xc8ccd0, 0x2a2018, 0.9));
-    const key = new THREE.DirectionalLight(0xffe2c0, 1.5); key.position.set(2, 3, 3); portraitScene.add(key);
-    const rim = new THREE.DirectionalLight(0x8aa0c0, 0.9); rim.position.set(-3, 2, -2); portraitScene.add(rim);
-    portraitCam = new THREE.PerspectiveCamera(26, 1, 0.1, 20);
-  }
-  portraitRenderer.setSize(size, size, false);
+/* ================= портреты и витрина героя ================= */
+let portraitRenderer = null, portraitScene = null, portraitCam = null, portraitRim = null;
+function portraitSetup() {
+  if (portraitRenderer) return;
+  const c = document.createElement('canvas');
+  portraitRenderer = new THREE.WebGLRenderer({ canvas: c, antialias: true, alpha: true, preserveDrawingBuffer: true });
+  portraitRenderer.toneMapping = THREE.ACESFilmicToneMapping; portraitRenderer.toneMappingExposure = 1.2;
+  portraitScene = new THREE.Scene();
+  portraitScene.environment = makeEnvironment(portraitRenderer, 0x2a3040, 0x6a6258, 0x1a1612, 'portrait');
+  portraitScene.add(new THREE.HemisphereLight(0xc8ccd0, 0x2a2018, 0.35));
+  const key = new THREE.DirectionalLight(0xffe2c0, 1.6); key.position.set(2, 3, 3); portraitScene.add(key);
+  portraitRim = new THREE.DirectionalLight(0x8aa0c0, 2.2); portraitRim.position.set(-3, 2.5, -2.5); portraitScene.add(portraitRim);
+  const rim2 = new THREE.DirectionalLight(0xffc890, 1.2); rim2.position.set(3, 1.5, -3); portraitScene.add(rim2);
+  portraitCam = new THREE.PerspectiveCamera(26, 1, 0.1, 20);
+}
+function portraitShot(nation, rankId, rankLine, w, h, pose) {
+  portraitSetup();
+  portraitRenderer.setSize(w, h, false);
+  portraitCam.aspect = w / h; portraitCam.updateProjectionMatrix();
   const fox = new BipedalFox(nation, rankId, rankLine);
-  fox.setWeapon(null);
-  fox.update(1, FoxAnim.IDLE, 0, false);
-  fox.head.rotation.y = 0.2;
-  fox.root.rotation.y = 0.45;
+  const armed = pose === 'full' && !!RANKS[rankId];
+  if (armed) fox.setWeapon(Object.keys(RANKS[rankId].load).find(id => id !== 'knife' && id !== 'knuckles') || null); else fox.setWeapon(null);
+  for (let i = 0; i < 40; i++) fox.update(0.05, pose === 'full' ? 'pose' : FoxAnim.IDLE, 0, armed);
+  portraitRim.color.setHex(fox.kit.rar.glow).lerp(new THREE.Color(0x8aa0c0), 0.5);
+  if (pose !== 'full') fox.head.rotation.y = 0.2;
+  fox.root.rotation.y = pose === 'full' ? 0.3 : 0.45;
   portraitScene.add(fox.root);
-  portraitCam.position.set(0.42, 1.74, 0.98); portraitCam.lookAt(0.02, 1.6, 0.06);
+  if (pose === 'full') { portraitCam.fov = 34; portraitCam.updateProjectionMatrix(); portraitCam.position.set(0.9, 1.3, 3.0); portraitCam.lookAt(0.05, 1.0, 0); }
+  else { portraitCam.fov = 28; portraitCam.updateProjectionMatrix(); portraitCam.position.set(0.6, 1.84, 1.45); portraitCam.lookAt(0.02, 1.62, 0.06); }
   portraitRenderer.render(portraitScene, portraitCam);
   portraitScene.remove(fox.root);
   return portraitRenderer.domElement.toDataURL('image/png');
 }
+// Погрудный портрет (карточки отряда).
+export function renderPortrait(nation, rankId, rankLine, size = 128) { return portraitShot(nation, rankId, rankLine, size, size, 'bust'); }
+// Герой в полный рост с оружием (витрина в казарме).
+export function renderHero(nation, rankId, rankLine, w = 240, h = 320) { return portraitShot(nation, rankId, rankLine, w, h, 'full'); }
 export { clamp };

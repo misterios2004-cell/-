@@ -107,7 +107,9 @@ export class World {
     const th = this.theme;
     this.scene.fog = new THREE.Fog(th.sky[1], th.fog[0], th.fog[1]);
     this.scene.background = new THREE.Color(th.sky[1]);
-    this.scene.add(new THREE.HemisphereLight(th.hemi[0], th.hemi[1], th.hemi[2]));
+    this.hemi = new THREE.HemisphereLight(th.hemi[0], th.hemi[1], th.hemi[2]); this.scene.add(this.hemi);
+    // контровой свет навстречу солнцу: выделяет силуэты героев
+    const rim = new THREE.DirectionalLight(0x9ab4d8, this.quality === 'low' ? 0 : 0.55); rim.position.set(60, 40, -45); this.scene.add(rim);
     const sun = this.sun = new THREE.DirectionalLight(th.sun[0], th.sun[1]);
     sun.position.set(-60, 95, 45);
     if (this.quality !== 'low') {
@@ -131,9 +133,14 @@ export class World {
     this.scene.add(this.sky);
     const sunSprite = new THREE.Sprite(new THREE.SpriteMaterial({ map: MD.TEX.soft, color: th.sun[0], fog: false, depthWrite: false }));
     sunSprite.position.set(-240, 300, 180); sunSprite.scale.setScalar(90); this.scene.add(sunSprite);
+    // широкое сияние вокруг солнца и зарево у горизонта — «кинематографичное» небо
+    const glow = new THREE.Sprite(new THREE.SpriteMaterial({ map: MD.TEX.soft, color: th.sun[0], transparent: true, opacity: 0.35, blending: THREE.AdditiveBlending, fog: false, depthWrite: false }));
+    glow.position.copy(sunSprite.position); glow.scale.setScalar(420); this.scene.add(glow);
+    const dawn = new THREE.Sprite(new THREE.SpriteMaterial({ map: MD.TEX.soft, color: th.sun[0], transparent: true, opacity: 0.28, blending: THREE.AdditiveBlending, fog: false, depthWrite: false }));
+    dawn.position.set(-300, 25, 225); dawn.scale.set(700, 160, 1); this.scene.add(dawn);
     this.clouds = [];
     for (let i = 0; i < 14; i++) {
-      const s = new THREE.Sprite(new THREE.SpriteMaterial({ map: MD.TEX.smoke, color: this.def.theme === 'ash' ? 0x5a4a50 : 0xb8bcc0, transparent: true, opacity: 0.6, fog: false, depthWrite: false }));
+      const s = new THREE.Sprite(new THREE.SpriteMaterial({ map: MD.TEX.smoke, color: new THREE.Color(this.def.theme === 'ash' ? 0x5a4a50 : 0xb8bcc0).lerp(new THREE.Color(th.sun[0]), 0.35), transparent: true, opacity: 0.6, fog: false, depthWrite: false }));
       s.position.set(this.srnd(-200, 200), this.srnd(55, 90), this.srnd(-200, 200)); s.scale.set(this.srnd(30, 60), this.srnd(12, 20), 1);
       this.scene.add(s); this.clouds.push(s);
     }

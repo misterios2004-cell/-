@@ -124,15 +124,15 @@ export const CRATE_POOL = ['grenade', 'grenade', 'bazooka', 'bazooka', 'mortar',
 
 // Темы оформления карт.
 export const THEMES = {
-  farm:   { name: 'Поля',      sky: [0x4f5f6c, 0x9a9a8c], fog: [110, 300], hemi: [0xa8b4b8, 0x3a3024, 0.9], sun: [0xf2dcc0, 1.25], water: 0x243a40, poison: false, exposure: 1.05,
+  farm:   { name: 'Поля',      sky: [0x2e4a6e, 0xd6a878], fog: [110, 300], hemi: [0xb0bcc8, 0x3a3024, 0.9], sun: [0xffd6a0, 1.4], water: 0x243a40, poison: false, exposure: 1.05,
             grass: [0.22, 0.27, 0.13], dry: [0.33, 0.3, 0.18], dirt: [0.26, 0.2, 0.14], rock: [0.34, 0.33, 0.31], sand: [0.46, 0.41, 0.31], trees: ['oak', 'pine'], weather: 'dust' },
-  swamp:  { name: 'Топи',      sky: [0x343c36, 0x6c7064], fog: [45, 170], hemi: [0x8a947e, 0x22201a, 0.95], sun: [0xc8c4a8, 0.75], water: 0x2c3a1c, poison: true, exposure: 1.0,
+  swamp:  { name: 'Топи',      sky: [0x1c2a2a, 0x6e7e56], fog: [45, 170], hemi: [0x8a9a7e, 0x22201a, 0.95], sun: [0xd8d4a0, 0.85], water: 0x2c3a1c, poison: true, exposure: 1.0,
             grass: [0.18, 0.21, 0.11], dry: [0.24, 0.23, 0.14], dirt: [0.19, 0.16, 0.11], rock: [0.27, 0.27, 0.24], sand: [0.27, 0.25, 0.18], trees: ['dead', 'willow'], weather: 'spores' },
-  snow:   { name: 'Перевал',   sky: [0x56626e, 0xa8b0b6], fog: [80, 240], hemi: [0xc8d0dc, 0x3c3e44, 1.0], sun: [0xe8ecf2, 0.95], water: 0x2a3e4a, poison: false, exposure: 1.0,
+  snow:   { name: 'Перевал',   sky: [0x2c4468, 0xa4b8cc], fog: [80, 240], hemi: [0xb8c8e0, 0x3c3e48, 0.95], sun: [0xfff0dc, 1.0], water: 0x2a3e4a, poison: false, exposure: 1.0,
             grass: [0.7, 0.73, 0.76], dry: [0.6, 0.63, 0.67], dirt: [0.28, 0.26, 0.24], rock: [0.36, 0.37, 0.4], sand: [0.48, 0.5, 0.52], trees: ['snowpine'], weather: 'snow' },
-  desert: { name: 'Пустыня',   sky: [0x5a6a7a, 0xc0a47a], fog: [130, 340], hemi: [0xd8c8a8, 0x4a3822, 0.9], sun: [0xf8dca8, 1.35], water: 0x28484c, poison: false, exposure: 1.0,
+  desert: { name: 'Пустыня',   sky: [0x2c5484, 0xe4b47c], fog: [130, 340], hemi: [0xd8c8a8, 0x4a3822, 0.9], sun: [0xffd8a0, 1.4], water: 0x28484c, poison: false, exposure: 1.0,
             grass: [0.56, 0.45, 0.28], dry: [0.5, 0.4, 0.24], dirt: [0.42, 0.3, 0.18], rock: [0.4, 0.31, 0.22], sand: [0.62, 0.52, 0.35], trees: ['palm', 'cactus'], weather: 'dust' },
-  ash:    { name: 'Пепелище',  sky: [0x1c1a20, 0x6a4a44], fog: [60, 210], hemi: [0x8a7a80, 0x201818, 0.85], sun: [0xe89a6a, 0.95], water: 0x2e3a18, poison: true, exposure: 1.05,
+  ash:    { name: 'Пепелище',  sky: [0x120c14, 0x8a3a26], fog: [60, 210], hemi: [0x8a7a80, 0x201818, 0.85], sun: [0xff9a5a, 1.05], water: 0x2e3a18, poison: true, exposure: 1.05,
             grass: [0.2, 0.2, 0.15], dry: [0.26, 0.22, 0.18], dirt: [0.2, 0.16, 0.13], rock: [0.24, 0.22, 0.23], sand: [0.33, 0.29, 0.25], trees: ['dead', 'pine'], weather: 'embers' },
 };
 

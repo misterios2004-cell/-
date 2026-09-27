@@ -2,6 +2,7 @@
 import { THREE, clamp, rnd, pick, angDiff, Sound, fmt, say, Save } from './core.js';
 import { RANKS, WEAPONS, NATIONS, CRATE_POOL, QUIPS, INF } from './data.js';
 import * as MD from './models.js';
+import { makeEnvironment } from './heroes.js';
 import { FOX_BODY, FoxAnim, FoxAction } from './models.js';
 import { VFX } from './theme.js';
 import { World, WATER_Y, HALF } from './world.js';
@@ -106,6 +107,11 @@ export class Battle {
     MD.setMaterialQuality(this.quality);
     this.world = new World(this.scene, cfg.map, this.quality);
     renderer.toneMappingExposure = this.world.theme.exposure ?? 1;
+    if (this.quality !== 'low') { // отражения окружения на латах и золоте, мягкий заполняющий свет
+      const th = this.world.theme, dirt = new THREE.Color().setRGB(...th.dirt);
+      this.scene.environment = makeEnvironment(renderer, th.sky[0], th.sky[1], dirt.getHex(), 'env-' + th.name);
+      this.world.hemi.intensity *= 0.6;
+    }
     this.fx = new Effects(this.scene, this.world);
     this.ai = new AI(this);
     this.teams = []; this.foxes = []; this.vehicles = []; this.proj = []; this.queue = []; this.mines = []; this.tnts = []; this.gas = [];
@@ -1152,6 +1158,9 @@ export class Battle {
     }
     for (let i = n; i < this.aimDots.length; i++) this.aimDots[i].visible = false;
     if (!(W && W.kind === 'airstrike' && this.state === 'turn')) this.ring.visible = false;
+  }
+  resize(w, h) {
+    this.camera.aspect = w / h; this.camera.updateProjectionMatrix();
   }
   render() { this.renderer.render(this.scene, this.camera); }
   dispose() {

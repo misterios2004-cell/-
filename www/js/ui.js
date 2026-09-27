@@ -5,6 +5,7 @@ import * as MD from './models.js';
 import { Battle, aimDir } from './battle.js';
 import { FOX_BODY } from './models.js';
 import { weaponIcon } from './icons.js';
+import { rarityOf } from './theme.js';
 
 const $ = (s, r = document) => r.querySelector(s);
 const $$ = (s, r = document) => [...r.querySelectorAll(s)];
@@ -18,6 +19,15 @@ function portrait(nation, rank) {
   if (!portraitCache.has(key)) portraitCache.set(key, MD.renderPortrait(NATIONS[nation], rank, RANKS[rank].line, 160));
   return portraitCache.get(key);
 }
+const heroCache = new Map();
+function heroShot(nation, rank) {
+  const key = nation + ':' + rank;
+  if (!heroCache.has(key)) heroCache.set(key, MD.renderHero(NATIONS[nation], rank, RANKS[rank].line, 300, 400));
+  return heroCache.get(key);
+}
+// Редкость героя по ступени звания: класс рамки, звёзды, подпись.
+const rar = rank => rarityOf(RANKS[rank].level);
+const stars = rank => `<span class="stars" aria-label="${rar(rank).stars} зв.">${'★'.repeat(rar(rank).stars)}</span>`;
 
 export const UI = {
   renderer: null, battle: null, demo: null, screen: null, touch: false,
@@ -73,7 +83,7 @@ export const UI = {
     if (this.battle) this.updateHud();
   },
   resize(w, h) {
-    for (const b of [this.battle, this.demo]) if (b) { b.camera.aspect = w / h; b.camera.updateProjectionMatrix(); }
+    for (const b of [this.battle, this.demo]) if (b) b.resize(w, h);
   },
 
   /* ================= экраны ================= */
@@ -103,7 +113,17 @@ export const UI = {
           <button class="btn" data-go="help">Как играть</button>
         </nav>
       </div>
+      <div class="heroline" aria-hidden="true">${this.titleHeroes().map(([n, r]) => `<div class="showcase r-${rar(r).id}"><img src="${heroShot(n, r)}" alt="">${stars(r)}<span class="rname">${rar(r).name}</span></div>`).join('')}</div>
       <p class="credit">Механика вдохновлена Hogs of War (Infogrames, 2000). Проект не связан с правообладателями.</p>`);
+  },
+
+  // Три героя для витрины главного меню: из кампании игрока или случайные фракции.
+  titleHeroes() {
+    const c = Save.data.campaign, key = c ? c.nation : '-';
+    if (this._titleHeroes && this._thKey === key) return this._titleHeroes;
+    this._thKey = key;
+    const nations = c ? [c.nation, c.nation, c.nation] : [...PLAYABLE_NATIONS].sort(() => Math.random() - 0.5).slice(0, 3);
+    return (this._titleHeroes = [[nations[0], 'sniper'], [nations[1], 'hero'], [nations[2], 'pyrotech']]);
   },
 
   /* ---------- новая кампания ---------- */
@@ -195,8 +215,8 @@ export const UI = {
           </div>
           <div class="enemies"><small>Силы противника:</small> ${Object.entries(counts).map(([r, n]) => `<span class="chip">${RANKS[r].name}${n > 1 ? ' ×' + n : ''}</span>`).join('')}${structs ? `<span class="chip">Техника: ${structs}</span>` : ''}${m.medals ? `<span class="chip gold">Медалей на карте: ${m.medals}</span>` : ''}</div>
           <h3>Отряд: ${chosen.size} из ${size}</h3>
-          <div class="roster">${c.roster.map(r => `<button class="unitcard ${chosen.has(r.id) ? 'on' : ''}" data-id="${r.id}" aria-pressed="${chosen.has(r.id)}">
-              <img src="${portrait(c.nation, r.rank)}" alt=""><b>${esc(r.name)}</b><small>${RANKS[r.rank].name} · ${RANKS[r.rank].hp} HP</small></button>`).join('')}</div>
+          <div class="roster">${c.roster.map(r => `<button class="unitcard r-${rar(r.rank).id} ${chosen.has(r.id) ? 'on' : ''}" data-id="${r.id}" aria-pressed="${chosen.has(r.id)}">
+              <img src="${portrait(c.nation, r.rank)}" alt="">${stars(r.rank)}<b>${esc(r.name)}</b><small>${RANKS[r.rank].name} · ${RANKS[r.rank].hp} HP</small></button>`).join('')}</div>
           <div class="row"><button class="btn big" id="go" ${chosen.size ? '' : 'disabled'}>В бой</button><button class="btn" data-go="barracks">Казарма</button><button class="btn" data-go="map">К карте</button></div>
         </div>`);
       $$('.unitcard', this.scr).forEach(b => b.addEventListener('click', () => {
@@ -245,9 +265,9 @@ export const UI = {
           <div class="bar"><div><div class="eyebrow">${esc(NATIONS[c.nation].name)}</div><h2>Казарма</h2></div>
             <div class="chips"><span class="chip gold">Очки повышения: <b>${c.pp}</b></span><button class="btn" data-go="map">К карте</button></div></div>
           <div class="barracks">
-            <div class="roster tall">${c.roster.map(x => `<button class="unitcard ${x.id === sel ? 'on' : ''}" data-id="${x.id}"><img src="${portrait(c.nation, x.rank)}" alt=""><b>${esc(x.name)}</b><small>${RANKS[x.rank].name}</small></button>`).join('')}</div>
+            <div class="roster tall">${c.roster.map(x => `<button class="unitcard r-${rar(x.rank).id} ${x.id === sel ? 'on' : ''}" data-id="${x.id}"><img src="${portrait(c.nation, x.rank)}" alt="">${stars(x.rank)}<b>${esc(x.name)}</b><small>${RANKS[x.rank].name}</small></button>`).join('')}</div>
             <div class="detail">
-              <div class="dhead"><img src="${portrait(c.nation, r.rank)}" alt="">
+              <div class="dhead"><div class="showcase r-${rar(r.rank).id}"><img src="${heroShot(c.nation, r.rank)}" alt="${esc(rk.name)}">${stars(r.rank)}<span class="rname">${rar(r.rank).name}</span></div>
                 <div><input id="rename" maxlength="16" value="${esc(r.name)}" aria-label="Имя бойца"><div class="rank" style="--c:${LINES[rk.line].color}">${rk.name} · ${LINES[rk.line].name}</div>
                 <div class="stats"><span>${rk.hp} HP</span><span>Побед: ${r.kills}</span><span>Операций: ${r.missions}</span></div></div></div>
               <h3>Снаряжение</h3><ul class="load">${loadList}</ul>
@@ -584,7 +604,8 @@ export const UI = {
       if (h.status.sleep) st.push('<span class="st sleep">сон</span>');
       if (h.status.hidden) st.push('<span class="st hide">маскировка</span>');
       if (h.swim) st.push('<span class="st swim">плывёт</span>');
-      const html = `<b style="color:${h.team.nation.css}">${esc(h.name)}</b><small>${h.rank.name}</small><span class="hp"><i style="width:${h.hp / h.maxHp * 100}%;background:${h.team.nation.css}"></i></span><em>${h.hp}/${h.maxHp}</em>${st.join('')}`;
+      const R = rarityOf(h.rank.level);
+      const html = `<b style="color:${h.team.nation.css}">${esc(h.name)}</b><small>${h.rank.name}</small><span class="stars" style="--r:${R.css}">${'★'.repeat(R.stars)}</span><span class="hp"><i style="width:${h.hp / h.maxHp * 100}%;background:${h.team.nation.css}"></i></span><em>${h.hp}/${h.maxHp}</em>${st.join('')}`;
       if (E.card.innerHTML !== html) E.card.innerHTML = html;
     }
     E.stam.style.width = (human ? b.stamina : 0) + '%';
