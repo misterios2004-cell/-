@@ -1,0 +1,10 @@
+{
+  "appId": "com.svinyi.okopy",
+  "appName": "Свиньи в окопах",
+  "webDir": "www",
+  "backgroundColor": "#1e1710",
+  "android": {
+    "backgroundColor": "#1e1710",
+    "allowMixedContent": false
+  }
+}

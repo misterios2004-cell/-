@@ -1,0 +1,72 @@
+name: Android APK
+
+on:
+  push:
+    branches: [main, 'claude/**']
+    paths: ['www/**', 'resources/**', 'package.json', 'package-lock.json', 'capacitor.config.json', '.github/workflows/android.yml']
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+
+      - name: Установить зависимости
+        run: npm ci
+
+      - name: Создать Android-проект
+        run: npx cap add android
+
+      - name: Иконки, заставка, ориентация, версия
+        run: |
+          RES=android/app/src/main/res
+          cp -r resources/android/res/* $RES/
+          find $RES -name 'splash.png' -exec cp resources/splash.png {} \;
+          if [ -f $RES/values/ic_launcher_background.xml ]; then
+            sed -i 's/#[0-9A-Fa-f]\{6\}/#5E6B35/' $RES/values/ic_launcher_background.xml
+          fi
+          sed -i 's/android:name=".MainActivity"/android:name=".MainActivity" android:screenOrientation="sensorLandscape"/' android/app/src/main/AndroidManifest.xml
+          sed -i "s/versionCode [0-9]*/versionCode ${{ github.run_number }}/; s/versionName \"[^\"]*\"/versionName \"2.0.${{ github.run_number }}\"/" android/app/build.gradle
+          grep -n 'screenOrientation' android/app/src/main/AndroidManifest.xml
+          grep -n 'versionCode\|versionName' android/app/build.gradle
+
+      - name: Синхронизировать веб-часть
+        run: npx cap sync android
+
+      - name: Собрать APK
+        working-directory: android
+        run: |
+          chmod +x gradlew
+          ./gradlew assembleDebug --no-daemon
+          cp app/build/outputs/apk/debug/app-debug.apk ../svinyi-v-okopah.apk
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: svinyi-v-okopah-apk
+          path: svinyi-v-okopah.apk
+
+      - name: Опубликовать релиз с APK
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: apk-${{ github.run_number }}
+          name: Свиньи в окопах — сборка ${{ github.run_number }}
+          target_commitish: ${{ github.sha }}
+          prerelease: ${{ github.ref != 'refs/heads/main' }}
+          files: svinyi-v-okopah.apk
+          body: |
+            Android-приложение «Свиньи в окопах», сборка ${{ github.run_number }} (коммит ${{ github.sha }}).
+            Установка: скачайте svinyi-v-okopah.apk на телефон и откройте файл. Android попросит разрешить установку из этого источника.

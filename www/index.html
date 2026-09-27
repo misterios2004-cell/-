@@ -1,0 +1,85 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+<title>Свиньи в окопах</title>
+<!--pwa-->
+<link rel="manifest" href="manifest.webmanifest">
+<meta name="theme-color" content="#1e1710">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<link rel="apple-touch-icon" href="icons/icon-192.png">
+<!--/pwa-->
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Russo+One&family=Rubik:wght@400;500;700&display=swap">
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+<div id="app">
+  <canvas id="view" aria-label="Поле боя"></canvas>
+  <div id="labels" aria-hidden="true"></div>
+  <div id="scope" hidden><i></i></div>
+
+  <div id="hud" hidden>
+    <div class="hTop">
+      <div id="hTeams" class="teamsbar"></div>
+      <div class="turnbox">
+        <div id="hTimer" class="timer">45</div>
+        <div id="hRound" class="round"></div>
+      </div>
+      <div class="tr">
+        <div class="wind" title="Ветер относительно камеры"><svg viewBox="-20 -20 40 40" aria-hidden="true"><circle r="18" fill="none" stroke="#6b5436" stroke-width="2"/><g id="hWindArrow"><path d="M0-14 L6-3 L2-3 L2 12 L-2 12 L-2-3 L-6-3Z" fill="#8FC1D4"/></g></svg><span>ветер<b id="hWindVal">0</b></span></div>
+        <button class="btn ghost" id="bSkip" type="button" title="Пропустить ход (Backspace)">Пропустить ход</button>
+        <button class="btn ghost ico" id="bCam" type="button" title="Обзор карты (C)" aria-label="Обзор карты">◎</button>
+        <button class="btn ghost ico" id="bPause" type="button" title="Пауза (Esc)" aria-label="Пауза">❚❚</button>
+      </div>
+    </div>
+    <div id="hCard" class="hogcardHud"></div>
+    <div id="hFeed" class="feed" aria-live="polite"></div>
+    <div id="hBanner" class="banner" hidden></div>
+
+    <div class="hBottom">
+      <div class="left">
+        <div id="stick" class="stick" aria-label="Джойстик"><div id="knob"></div></div>
+      </div>
+      <div class="mid">
+        <div class="meters">
+          <span>Бег <i><b id="hStam"></b></i></span>
+          <span>Сила <i><b id="hPower"></b></i></span>
+          <span hidden>Ранец <i><b id="hJet"></b></i></span>
+        </div>
+        <div class="wrow">
+          <button class="btn weaponBtn" id="hWeapon" type="button" title="Инвентарь (Tab)"></button>
+          <button class="btn ghost" id="bScope" type="button" hidden title="Оптический прицел (V)">Прицел</button>
+          <button class="btn ghost" id="bVeh" type="button" hidden title="Техника (F)">Техника</button>
+        </div>
+      </div>
+      <div class="right">
+        <div class="aimbtns"><button class="btn ghost ico" id="bUp" type="button" aria-label="Поднять ствол">▲</button><button class="btn ghost ico" id="bDown" type="button" aria-label="Опустить ствол">▼</button></div>
+        <div class="acts">
+          <button class="btn ghost" id="bRun" type="button" title="Бег (Shift)">Бег</button>
+          <button class="btn" id="bJump" type="button" title="Прыжок (Enter)">Прыжок</button>
+        </div>
+        <button class="btn fire" id="bFire" type="button" title="Огонь (Пробел)">Огонь</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="inv" class="inv" hidden>
+    <div class="invPanel" role="dialog" aria-labelledby="invTitle">
+      <div class="invHead"><h3 id="invTitle">Инвентарь</h3><button class="btn ghost ico" id="invClose" type="button" aria-label="Закрыть">✕</button></div>
+      <div id="invBody"></div>
+    </div>
+  </div>
+
+  <div id="screen"></div>
+  <div id="toast" hidden></div>
+  <div id="boot"><b>Свиньи в окопах</b><span>Загрузка…</span></div>
+</div>
+<script src="vendor/three.min.js"></script>
+<script src="vendor/capacitor.js"></script>
+<script type="module" src="js/main.js"></script>
+</body>
+</html>
