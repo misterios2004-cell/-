@@ -1,0 +1,638 @@
+<title>Спина после компрессионных переломов</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Golos+Text:wght@400;500;600;700&family=Unbounded:wght@500;700&family=JetBrains+Mono:wght@500;700&display=swap">
+<style>
+/* Layout: список занятий слева (сверху на телефоне) + плеер «видео» с фигурой, субтитрами и таймлайном */
+:root {
+  --bg: #f3f8fa;
+  --surface: #ffffff;
+  --stage: #dcecf1;
+  --ink: #1f2d36;
+  --muted: #5b6b75;
+  --line: #c9dbe2;
+  --prop: #5c6b75;
+  --accent: #1b7385;
+  --accent-soft: #d3e8ee;
+  --on-accent: #ffffff;
+  --warn: #b5432f;
+  --ok: #2a7a4b;
+  --font-display: "Unbounded", "Golos Text", system-ui, sans-serif;
+  --font-body: "Golos Text", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, Menlo, Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #111a20; --surface: #18242c; --stage: #1d2f38; --ink: #e6eef2; --muted: #9db0bb;
+    --line: #2c414c; --prop: #8aa0ac; --accent: #4fb3c7; --accent-soft: #1f3c46; --on-accent: #0c171c;
+    --warn: #e67a63; --ok: #5cc28a; color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #111a20; --surface: #18242c; --stage: #1d2f38; --ink: #e6eef2; --muted: #9db0bb;
+  --line: #2c414c; --prop: #8aa0ac; --accent: #4fb3c7; --accent-soft: #1f3c46; --on-accent: #0c171c;
+  --warn: #e67a63; --ok: #5cc28a; color-scheme: dark;
+}
+* { box-sizing: border-box; }
+[hidden] { display: none !important; }
+body { background: var(--bg); color: var(--ink); font-family: var(--font-body); font-size: 15px; line-height: 1.5; }
+.wrap { max-width: 1180px; margin: 0 auto; padding-inline: 16px; padding-block: 24px 48px; display: grid; gap: 24px; }
+header.top { display: grid; gap: 8px; }
+.eyebrow { font-size: 12px; letter-spacing: .08em; text-transform: uppercase; color: var(--accent); font-weight: 600; }
+h1 { font-family: var(--font-display); font-weight: 700; font-size: clamp(22px, 3.4vw, 32px); line-height: 1.15; margin: 0; text-wrap: balance; }
+.lead { color: var(--muted); max-width: 70ch; margin: 0; }
+.alert { border: 1px solid var(--warn); border-radius: 10px; padding: 12px 16px; display: grid; gap: 4px; max-width: 80ch; }
+.alert strong { color: var(--warn); }
+.alert ul { margin: 0; padding-left: 18px; }
+.alert p { margin: 0; color: var(--muted); font-size: 14px; }
+
+.app { display: grid; grid-template-columns: 280px minmax(0, 1fr); gap: 24px; align-items: start; }
+nav.list { display: grid; gap: 4px; position: sticky; top: calc(env(safe-area-inset-top, 0px) + 12px); }
+.stage-label { font-size: 12px; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); font-weight: 600; padding: 12px 10px 4px; }
+.stage-label small { display: block; text-transform: none; letter-spacing: 0; font-weight: 400; }
+nav.list button { all: unset; cursor: pointer; display: grid; grid-template-columns: 32px 1fr 18px; gap: 8px; align-items: center; padding: 8px 10px; border-radius: 8px; color: var(--ink); }
+nav.list button:hover { background: var(--accent-soft); }
+nav.list button:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+nav.list button[aria-current="true"] { background: var(--accent); color: var(--on-accent); }
+nav.list .num { font-family: var(--font-mono); font-size: 13px; opacity: .8; }
+nav.list .done { font-size: 13px; color: var(--ok); }
+nav.list button[aria-current="true"] .done { color: var(--on-accent); }
+
+.player { display: grid; gap: 16px; min-width: 0; }
+.player-head { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: baseline; gap: 8px 16px; }
+.player-head h2 { font-family: var(--font-display); font-weight: 500; font-size: clamp(19px, 2.6vw, 24px); margin: 0; text-wrap: balance; }
+.player-head .phase { font-size: 13px; color: var(--muted); }
+.screen { position: relative; background: var(--stage); border-radius: 14px; overflow: hidden; aspect-ratio: 2 / 1; max-width: 100%; }
+.screen svg { display: block; width: 100%; height: 100%; }
+.hud { position: absolute; inset: 12px 14px auto 14px; display: flex; justify-content: space-between; align-items: flex-start; pointer-events: none; gap: 8px; }
+.badge { background: var(--accent); color: var(--on-accent); font-family: var(--font-mono); font-weight: 700; border-radius: 999px; min-width: 34px; height: 34px; display: inline-grid; place-items: center; padding: 0 10px; font-size: 15px; }
+.rep { font-family: var(--font-mono); font-size: 13px; color: var(--accent); font-weight: 700; background: var(--surface); border-radius: 999px; padding: 6px 12px; }
+.side { font-size: 13px; color: var(--ink); background: var(--surface); border-radius: 999px; padding: 6px 12px; }
+.hud .right { display: flex; gap: 6px; flex-wrap: wrap; justify-content: flex-end; }
+.hold { position: absolute; right: 16px; bottom: 14px; font-family: var(--font-mono); font-weight: 700; color: var(--accent); font-size: clamp(28px, 6vw, 52px); line-height: 1; font-variant-numeric: tabular-nums; }
+.hold small { font-size: .4em; display: block; text-align: right; color: var(--muted); font-weight: 500; }
+.overlay { position: absolute; inset: 0; display: grid; place-items: center; background: color-mix(in srgb, var(--stage) 70%, transparent); }
+.overlay button { all: unset; cursor: pointer; width: 76px; height: 76px; border-radius: 50%; background: var(--accent); color: var(--on-accent); display: grid; place-items: center; }
+.overlay button:focus-visible { outline: 3px solid var(--ink); outline-offset: 3px; }
+.caption { min-height: 3.2em; font-size: clamp(16px, 2.2vw, 19px); font-weight: 500; margin: 0; }
+.caption .k { font-family: var(--font-mono); color: var(--accent); margin-right: 8px; }
+
+.timeline { position: relative; height: 26px; cursor: pointer; touch-action: none; }
+.timeline .track { position: absolute; left: 0; right: 0; top: 11px; height: 4px; border-radius: 2px; background: var(--line); }
+.timeline .fill { position: absolute; left: 0; top: 11px; height: 4px; border-radius: 2px; background: var(--accent); }
+.timeline .tick { position: absolute; top: 7px; width: 2px; height: 12px; background: var(--muted); opacity: .45; }
+.timeline .knob { position: absolute; top: 5px; width: 16px; height: 16px; margin-left: -8px; border-radius: 50%; background: var(--accent); border: 3px solid var(--surface); }
+.timeline:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 4px; }
+
+.controls { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.btn { all: unset; cursor: pointer; display: inline-flex; gap: 6px; align-items: center; padding: 8px 14px; border-radius: 8px; border: 1px solid var(--line); background: var(--surface); color: var(--ink); font-size: 14px; font-weight: 500; }
+.btn:hover { border-color: var(--accent); }
+.btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.btn.primary { background: var(--accent); border-color: var(--accent); color: var(--on-accent); }
+.btn[aria-pressed="true"] { background: var(--accent-soft); border-color: var(--accent); }
+.time { font-family: var(--font-mono); font-size: 13px; color: var(--muted); font-variant-numeric: tabular-nums; margin-left: auto; }
+.dose { display: flex; flex-wrap: wrap; gap: 8px 16px; align-items: center; font-size: 14px; }
+.dose label { display: inline-flex; gap: 6px; align-items: center; color: var(--muted); }
+.dose select { font: inherit; padding: 4px 8px; border-radius: 6px; border: 1px solid var(--line); background: var(--surface); color: var(--ink); }
+.info { display: grid; gap: 6px; border-top: 1px solid var(--line); padding-top: 14px; }
+.info p { margin: 0; max-width: 72ch; }
+.info .why { color: var(--muted); }
+
+.finish { display: grid; gap: 10px; background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 16px; }
+.finish p { margin: 0; }
+.finish .row { display: flex; flex-wrap: wrap; gap: 8px; }
+.finish .answer { color: var(--muted); }
+
+.avoid { display: grid; gap: 16px; }
+.avoid img { border-radius: 14px; max-width: 100%; width: 560px; }
+.cols { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 16px 32px; }
+.cols h3 { font-size: 15px; margin: 0 0 4px; }
+.cols ul { margin: 0; padding-left: 18px; }
+.cols .no h3 { color: var(--warn); }
+.cols .yes h3 { color: var(--ok); }
+
+footer { border-top: 1px solid var(--line); padding-top: 16px; display: grid; gap: 8px; color: var(--muted); font-size: 14px; }
+footer h2 { font-size: 15px; color: var(--ink); margin: 0; }
+footer ol { margin: 0; padding-left: 20px; }
+
+@media (max-width: 820px) {
+  .app { grid-template-columns: minmax(0, 1fr); }
+  nav.list { position: static; grid-auto-flow: column; grid-auto-columns: max-content; overflow-x: auto; padding-bottom: 6px; }
+  .stage-label { display: none; }
+  nav.list button { grid-template-columns: auto auto auto; border: 1px solid var(--line); }
+  nav.list .title { white-space: nowrap; }
+}
+</style>
+
+<div class="wrap">
+  <header class="top">
+    <div class="eyebrow">Домашняя программа · грудной отдел</div>
+    <h1>Спина после компрессионных переломов</h1>
+    <p class="lead">Интерактивное видео к каждому занятию: фигура показывает движение по трём кадрам из программы, отсчитывает удержание и повторы. Укреплять разгибатели спины, избегать сгибания и скручивания позвоночника. Программу стоит показать врачу ЛФК или реабилитологу перед стартом.</p>
+    <div class="alert" role="note">
+      <strong>Сначала к врачу, если</strong>
+      <ul>
+        <li>онемение, слабость или «ватность» в ногах;</li>
+        <li>опоясывающая боль вокруг груди, проблемы с мочеиспусканием;</li>
+        <li>боль усиливается в покое или ночью, растёт с каждой неделей.</li>
+      </ul>
+      <p>Переломы травматические (рукопашный бой). Денситометрию (DXA) стоит обсудить с врачом, только если какой-то из переломов случился от несильного удара или падения.</p>
+    </div>
+  </header>
+
+  <div class="app">
+    <nav class="list" id="nav" aria-label="Занятия"></nav>
+
+    <main class="player" id="player">
+      <div class="player-head">
+        <h2 id="exTitle"></h2>
+        <span class="phase" id="exPhase"></span>
+      </div>
+
+      <div class="screen" id="screen">
+        <svg id="svg" viewBox="0 0 360 180" role="img" aria-label="Анимация упражнения"></svg>
+        <div class="hud">
+          <span class="badge" id="frameBadge">1</span>
+          <div class="right"><span class="side" id="sideTag" hidden></span><span class="rep" id="repTag"></span></div>
+        </div>
+        <div class="hold" id="holdBox" hidden><span id="holdNum">5</span><small>держите</small></div>
+        <div class="overlay" id="overlay">
+          <button id="bigPlay" aria-label="Запустить видео">
+            <svg width="30" height="30" viewBox="0 0 24 24" aria-hidden="true"><path d="M7 4.5v15l12-7.5z" fill="currentColor"/></svg>
+          </button>
+        </div>
+      </div>
+
+      <p class="caption" id="caption" aria-live="polite"></p>
+
+      <div class="timeline" id="timeline" role="slider" tabindex="0" aria-label="Перемотка" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0">
+        <div class="track"></div><div id="ticks"></div><div class="fill" id="fill"></div><div class="knob" id="knob"></div>
+      </div>
+
+      <div class="controls">
+        <button class="btn primary" id="playBtn">Старт</button>
+        <button class="btn" id="prevFrame" aria-label="Предыдущий кадр">← Кадр</button>
+        <button class="btn" id="nextFrame" aria-label="Следующий кадр">Кадр →</button>
+        <button class="btn" id="restart">Сначала</button>
+        <button class="btn" id="voice" aria-pressed="false">Озвучка</button>
+        <span class="time" id="time">0:00 / 0:00</span>
+      </div>
+
+      <div class="dose" id="dose"></div>
+
+      <div class="info">
+        <p><strong>Дозировка:</strong> <span id="doseText"></span> После кадра 3 — плавно вернуться в положение 1.</p>
+        <p class="why" id="why"></p>
+      </div>
+
+      <div class="finish" id="finish" hidden>
+        <p><strong>Подход завершён.</strong> Было ли больно во время упражнения?</p>
+        <div class="row">
+          <button class="btn" id="noPain">Без боли</button>
+          <button class="btn" id="pain">Была боль</button>
+          <button class="btn primary" id="nextEx">Следующее занятие →</button>
+        </div>
+        <p class="answer" id="answer" hidden></p>
+      </div>
+    </main>
+  </div>
+
+  <section class="avoid" id="avoid">
+    <h2 class="player-head" style="margin:0"><span style="font-family:var(--font-display);font-weight:500;font-size:clamp(19px,2.6vw,24px)">Что исключить и что заменить</span></h2>
+    <img src="lift.png" alt="Слева наклон с круглой спиной — неправильно, справа подъём предмета через присед — правильно" width="960" height="480">
+    <p style="margin:0;max-width:72ch">Поднимайте предметы через присед, держа их близко к телу. Наклон с круглой спиной давит на передний край позвонков — именно там ломаются клиновидные позвонки.</p>
+    <div class="cols">
+      <div class="no"><h3>Исключить</h3><ul>
+        <li>скручивания на пресс, подъёмы корпуса;</li>
+        <li>наклоны вперёд к ногам, растяжка с круглой спиной;</li>
+        <li>резкие повороты корпуса, скрутки в йоге;</li>
+        <li>прыжки и игровые виды: баскетбол, волейбол;</li>
+        <li>брасс с поднятой над водой головой.</li>
+      </ul></div>
+      <div class="yes"><h3>Можно</h3><ul>
+        <li>плавание на спине и кролем, лицо в воде (как советовал врач);</li>
+        <li>быстрая ходьба — верхний предел ударной нагрузки при переломах позвонков;</li>
+        <li>силовые для ног и рук с прямой спиной.</li>
+      </ul></div>
+    </div>
+  </section>
+
+  <footer>
+    <h2>Источники программы</h2>
+    <ol>
+      <li>Strong, steady and straight: UK consensus, Br J Sports Med 2022</li>
+      <li>Too Fit To Fracture, Osteoporos Int 2014</li>
+      <li>Osteoporosis Canada — памятка для пациентов</li>
+      <li>Sinaki et al., Bone 2002 — 10-летнее наблюдение</li>
+      <li>Sinaki et al., Curr Osteoporos Rep 2010</li>
+      <li>Herman &amp; Wallace — адаптация при множественных переломах</li>
+      <li>Aurora Health Care — какие упражнения исключить</li>
+    </ol>
+    <p>Рисунки схематичные. Программа не заменяет осмотр.</p>
+  </footer>
+</div>
+
+<script>
+(() => {
+"use strict";
+// Позы — в координатах исходных рисунков (360×180). У всех кадров одного упражнения одинаковая структура, поэтому их можно плавно интерполировать.
+const G = (y) => ({ t: "line", d: [[8, y], [352, y]], w: 2, c: "prop" });
+const CHAIR_SIDE = [
+  { t: "line", d: [[176, 123], [245, 123]], w: 3, c: "prop" },
+  { t: "line", d: [[183, 123], [183, 171]], w: 3, c: "prop" },
+  { t: "line", d: [[237, 123], [237, 171]], w: 3, c: "prop" },
+];
+const SEAT_LEG = [[201, 120], [258, 120], [258, 170]];
+const ARROW = (x1, y1, x2, y2) => ({ a: [x1, y1, x2, y2] });
+
+const EX = [
+  { id: 1, stage: 1, title: "Прижать плечи к полу", reps: [10], hold: [5], unit: "10 раз × 5 с.",
+    why: "Укрепляет разгибатели спины в положении без нагрузки на позвонки — так адаптируют программу при нескольких переломах.",
+    props: [G(155)],
+    caps: ["Лёжа на спине, колени согнуты, руки вдоль тела.", "Согните руки в локтях, локти на полу.", "Прижмите плечи и локти к полу, сведите лопатки. Держите 5 с."],
+    frames: [
+      { h: [57, 137], l: [[[78, 144], [195, 144]], [[195, 144], [240, 99], [273, 150]], [[95, 148], [132, 149], [168, 150]]] },
+      { h: [57, 137], l: [[[78, 144], [195, 144]], [[195, 144], [240, 99], [273, 150]], [[92, 148], [128, 148], [134, 113]]] },
+      { h: [57, 138], l: [[[78, 145], [195, 145]], [[195, 145], [240, 99], [273, 150]], [[92, 149], [128, 149], [134, 113]]], ar: [ARROW(93, 90, 93, 124), ARROW(129, 90, 129, 124)] },
+    ] },
+  { id: 2, stage: 1, title: "Втянуть подбородок", reps: [10], hold: [5], unit: "10 раз × 5 с.",
+    why: "Выравнивает шею и верх грудного отдела, работает против сутулости.",
+    props: [G(155), { t: "rect", d: [33, 145, 51, 10], c: "prop" }],
+    caps: ["Лёжа, голова на тонкой подушке, взгляд вверх.", "Втяните подбородок — «двойной подбородок», голова не отрывается.", "Слегка прижмите затылок к подушке. Держите 5 с."],
+    frames: [
+      { h: [60, 128], l: [[[80, 141], [198, 144]], [[198, 144], [243, 98], [276, 149]], [[98, 148], [172, 150]]] },
+      { h: [53, 131], l: [[[80, 141], [198, 144]], [[198, 144], [243, 98], [276, 149]], [[98, 148], [172, 150]]], ar: [ARROW(84, 111, 64, 113)] },
+      { h: [53, 132], l: [[[80, 141], [198, 144]], [[198, 144], [243, 98], [276, 149]], [[98, 148], [172, 150]]], ar: [ARROW(53, 90, 53, 108)] },
+    ] },
+  { id: 3, stage: 1, title: "Свести лопатки сидя", reps: [10], hold: [5], unit: "10 раз × 5 с.",
+    why: "Укрепляет мышцы между лопатками, которые держат грудной отдел прямо.",
+    props: [G(171), ...CHAIR_SIDE],
+    caps: ["Сидя ровно, руки свободно на бёдрах.", "Согните руки под 90°, локти у корпуса.", "Отведите локти назад, сведите лопатки, плечи не поднимайте. Держите 5 с."],
+    frames: [
+      { h: [198, 32], l: [[[198, 48], [201, 120]], SEAT_LEG, [[198, 62], [205, 86], [212, 110]]] },
+      { h: [198, 32], l: [[[198, 48], [201, 120]], SEAT_LEG, [[198, 62], [198, 96], [230, 96]]] },
+      { h: [198, 32], l: [[[198, 48], [201, 120]], SEAT_LEG, [[198, 62], [172, 88], [200, 100]]], ar: [ARROW(160, 68, 130, 68)] },
+    ] },
+  { id: 4, stage: 1, title: "Вытянуться вверх сидя", reps: [8, 9, 10], hold: [3], unit: "8–10 раз × 3 с.",
+    why: "Разгибание спины сидя — стартовая позиция, рекомендованная клиникой Мэйо до перехода в положение лёжа на животе.",
+    props: [G(171), ...CHAIR_SIDE],
+    caps: ["Сидя ровно, руки скрещены на груди.", "Вытянитесь макушкой вверх.", "Чуть отклонитесь назад, раскрывая грудь. Поясница не прогибается. Держите 3 с."],
+    frames: [
+      { h: [196, 32], l: [[[198, 50], [201, 120]], SEAT_LEG, [[198, 65], [222, 77], [195, 87]]] },
+      { h: [199, 20], l: [[[199, 38], [201, 120]], SEAT_LEG, [[199, 58], [223, 70], [198, 80]]], ar: [ARROW(165, 60, 165, 22)] },
+      { h: [186, 24], l: [[[192, 40], [201, 120]], SEAT_LEG, [[193, 60], [220, 72], [192, 82]]], ar: [ARROW(163, 32, 150, 18)] },
+    ] },
+  { id: 5, stage: 1, title: "Скольжение у стены", reps: [8, 9, 10], hold: null, unit: "8–10 раз.",
+    why: "Тренирует осанку и раскрывает грудь и передние мышцы плеч.",
+    props: [G(170), { t: "rect", d: [105, 6, 150, 164], c: "prop", o: 0.5, f: "none" }],
+    caps: ["Спиной к стене: затылок, лопатки, ягодицы касаются её.", "Поднимите руки в форме «W», локти и кисти у стены.", "Скользите руками вверх, пока локти и лопатки у стены."],
+    frames: [
+      { h: [180, 32], l: [[[180, 48], [180, 108]], [[162, 168], [180, 108], [198, 168]], [[180, 63], [167, 86], [155, 108]], [[180, 63], [193, 86], [205, 108]]] },
+      { h: [180, 32], l: [[[180, 48], [180, 108]], [[162, 168], [180, 108], [198, 168]], [[180, 66], [147, 67], [141, 33]], [[180, 66], [213, 67], [219, 33]]] },
+      { h: [180, 32], l: [[[180, 48], [180, 108]], [[162, 168], [180, 108], [198, 168]], [[180, 66], [152, 44], [149, 8]], [[180, 66], [208, 44], [211, 8]]], ar: [ARROW(126, 60, 126, 24), ARROW(234, 60, 234, 24)] },
+    ] },
+  { id: 6, stage: 1, title: "Ягодичный мост", reps: [10], hold: [3], unit: "10 раз × 3 с.",
+    why: "Укрепляет ягодицы и разгибатели без сгибания позвоночника.",
+    props: [G(155)],
+    caps: ["Лёжа на спине, стопы на полу.", "Начните поднимать таз, напрягая ягодицы.", "Прямая линия от плеч до колен, без прогиба в пояснице. Держите 3 с."],
+    frames: [
+      { h: [54, 141], l: [[[75, 147], [178, 147]], [[178, 147], [225, 96], [253, 153]], [[90, 151], [157, 152]]] },
+      { h: [54, 141], l: [[[75, 147], [175, 128]], [[175, 128], [225, 93], [253, 153]], [[90, 151], [157, 152]]], ar: [ARROW(198, 152, 198, 128)] },
+      { h: [54, 141], l: [[[75, 147], [173, 108]], [[173, 108], [228, 93], [252, 153]], [[90, 151], [157, 152]]], ar: [ARROW(198, 152, 198, 118)] },
+    ] },
+  { id: 7, stage: 1, title: "Птица-собака", reps: [6, 7, 8], hold: [3, 4, 5], unit: "6–8 раз на сторону × 3–5 с.", sides: ["правая рука + левая нога", "левая рука + правая нога"],
+    why: "Выносливость мышц спины и баланс при нейтральном позвоночнике.",
+    props: [G(155)],
+    caps: ["На четвереньках, спина прямая как стол.", "Вытяните одну руку вперёд параллельно полу.", "Добавьте противоположную ногу назад. Держите, затем другая пара."],
+    frames: [
+      { h: [96, 78], l: [[[120, 90], [213, 93]], [[150, 90], [150, 153]], [[213, 93], [213, 152], [268, 152]], [[120, 90], [121, 121], [123, 153]], [[213, 93], [213, 152], [268, 152]]] },
+      { h: [96, 78], l: [[[120, 88], [213, 93]], [[123, 90], [126, 153]], [[213, 93], [213, 152], [268, 152]], [[120, 88], [88, 86], [55, 84]], [[213, 93], [213, 152], [268, 152]]] },
+      { h: [96, 78], l: [[[120, 88], [213, 93]], [[125, 90], [126, 153]], [[213, 93], [213, 152], [268, 152]], [[120, 88], [88, 86], [55, 84]], [[213, 93], [256, 90], [300, 87]]] },
+    ] },
+  { id: 8, stage: 2, title: "Разгибание лёжа на животе", reps: [8, 9, 10], hold: [3], unit: "8–10 раз × 3 с.",
+    why: "Именно этот тип упражнений в исследованиях Синаки снижал частоту новых переломов позвонков.",
+    props: [G(155), { t: "ell", d: [185, 147, 37, 7], c: "prop" }],
+    caps: ["Лёжа на животе, подушка под животом, лоб к полу, руки вдоль тела.", "Сведите лопатки и оторвите кисти от пола.", "Приподнимите грудь на несколько сантиметров, взгляд в пол. Держите 3 с."],
+    frames: [
+      { h: [78, 139], l: [[[98, 143], [192, 137], [310, 150]], [[105, 147], [178, 148]]] },
+      { h: [77, 139], l: [[[98, 143], [192, 137], [310, 150]], [[100, 144], [180, 130]]], ar: [ARROW(147, 128, 147, 108)] },
+      { h: [83, 120], l: [[[102, 126], [192, 137], [310, 150]], [[104, 130], [180, 134]]], ar: [ARROW(120, 106, 120, 84)] },
+    ] },
+  { id: 9, stage: 2, title: "Стойка на одной ноге", reps: [1], hold: [30], unit: "до 30 с на ногу.", sides: ["правая нога опорная", "левая нога опорная"],
+    why: "Баланс снижает риск падений; консенсус Too Fit To Fracture советует баланс ежедневно.",
+    props: [G(170), { t: "line", d: [[255, 68], [255, 170]], w: 3, c: "prop" }, { t: "line", d: [[255, 120], [300, 120], [300, 170]], w: 3, c: "prop" }],
+    caps: ["Стоя прямо, рука на спинке стула.", "Поднимите одну ногу, согнув её в колене.", "Ослабьте опору: один палец или рука над стулом. До 30 с на ногу."],
+    frames: [
+      { h: [165, 29], l: [[[165, 48], [165, 105]], [[165, 62], [250, 75]], [[165, 105], [160, 137], [156, 170]], [[165, 105], [170, 137], [173, 170]]] },
+      { h: [165, 29], l: [[[165, 48], [165, 105]], [[165, 62], [250, 75]], [[165, 105], [165, 137], [165, 170]], [[165, 105], [190, 128], [177, 150]]] },
+      { h: [165, 29], l: [[[165, 48], [165, 105]], [[165, 62], [222, 87]], [[165, 105], [165, 137], [165, 170]], [[165, 105], [190, 128], [177, 150]]] },
+    ] },
+];
+
+const $ = (id) => document.getElementById(id);
+const svg = $("svg");
+const NS = "http://www.w3.org/2000/svg";
+const store = {
+  get(k) { try { return JSON.parse(localStorage.getItem(k)); } catch { return null; } },
+  set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch {} },
+};
+const done = new Set(store.get("spine-done") || []);
+
+// --- Навигация ---
+function renderNav() {
+  const nav = $("nav");
+  nav.innerHTML = "";
+  [[1, "Этап 1. Пока есть боль", "Каждый день, только в безболезненной амплитуде"], [2, "Этап 2. Когда боль утихла", "После разрешения врача ЛФК"]].forEach(([s, label, sub]) => {
+    const h = document.createElement("div");
+    h.className = "stage-label";
+    h.innerHTML = `${label}<small>${sub}</small>`;
+    nav.appendChild(h);
+    EX.filter((e) => e.stage === s).forEach((e) => {
+      const b = document.createElement("button");
+      b.setAttribute("aria-current", String(e === cur));
+      b.innerHTML = `<span class="num">${String(e.id).padStart(2, "0")}</span><span class="title">${e.title}</span><span class="done">${done.has(e.id) ? "✓" : ""}</span>`;
+      b.onclick = () => load(e);
+      nav.appendChild(b);
+      if (e === cur && nav.scrollWidth > nav.clientWidth) nav.scrollLeft = b.offsetLeft - 16;
+    });
+  });
+}
+
+// --- Сцена ---
+const COL = { ink: "var(--ink)", prop: "var(--prop)", accent: "var(--accent)" };
+let figEls = null;
+function buildScene(e) {
+  svg.innerHTML = "";
+  const defs = document.createElementNS(NS, "defs");
+  defs.innerHTML = `<marker id="ah" viewBox="0 0 10 10" refX="5" refY="5" markerWidth="4" markerHeight="4" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" fill="var(--accent)"/></marker>`;
+  svg.appendChild(defs);
+  e.props.forEach((p) => {
+    let el;
+    if (p.t === "line") { el = document.createElementNS(NS, "polyline"); el.setAttribute("points", p.d.map((q) => q.join(",")).join(" ")); el.setAttribute("fill", "none"); el.setAttribute("stroke-width", p.w); }
+    if (p.t === "rect") { el = document.createElementNS(NS, "rect"); const [x, y, w, h] = p.d; Object.entries({ x, y, width: w, height: h, rx: 3 }).forEach(([k, v]) => el.setAttribute(k, v)); el.setAttribute("fill", "none"); el.setAttribute("stroke-width", 2.5); }
+    if (p.t === "ell") { el = document.createElementNS(NS, "ellipse"); const [cx, cy, rx, ry] = p.d; Object.entries({ cx, cy, rx, ry }).forEach(([k, v]) => el.setAttribute(k, v)); el.setAttribute("fill", "none"); el.setAttribute("stroke-width", 2.5); }
+    el.setAttribute("stroke", COL[p.c]);
+    el.setAttribute("stroke-linecap", "round");
+    el.setAttribute("stroke-linejoin", "round");
+    if (p.o) el.setAttribute("opacity", p.o);
+    svg.appendChild(el);
+  });
+  const ghost = document.createElementNS(NS, "g");
+  ghost.setAttribute("opacity", "0.18");
+  svg.appendChild(ghost);
+  const g = document.createElementNS(NS, "g");
+  svg.appendChild(g);
+  const lines = e.frames[0].l.map(() => {
+    const pl = document.createElementNS(NS, "polyline");
+    Object.entries({ fill: "none", stroke: "var(--ink)", "stroke-width": 4.5, "stroke-linecap": "round", "stroke-linejoin": "round" }).forEach(([k, v]) => pl.setAttribute(k, v));
+    g.appendChild(pl);
+    return pl;
+  });
+  const head = document.createElementNS(NS, "circle");
+  head.setAttribute("r", 14);
+  head.setAttribute("fill", "var(--ink)");
+  g.appendChild(head);
+  const arrows = document.createElementNS(NS, "g");
+  svg.appendChild(arrows);
+  // Призрак исходного положения — чтобы видеть амплитуду движения.
+  const f0 = e.frames[0];
+  f0.l.forEach((pts) => {
+    const pl = document.createElementNS(NS, "polyline");
+    Object.entries({ points: pts.map((q) => q.join(",")).join(" "), fill: "none", stroke: "var(--ink)", "stroke-width": 4.5, "stroke-linecap": "round", "stroke-linejoin": "round" }).forEach(([k, v]) => pl.setAttribute(k, v));
+    ghost.appendChild(pl);
+  });
+  const gh = document.createElementNS(NS, "circle");
+  Object.entries({ cx: f0.h[0], cy: f0.h[1], r: 14, fill: "var(--ink)" }).forEach(([k, v]) => gh.setAttribute(k, v));
+  ghost.appendChild(gh);
+  figEls = { lines, head, arrows, ghost };
+}
+
+const lerp = (a, b, t) => a + (b - a) * t;
+const ease = (t) => (t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2);
+// Отрезки с разным числом точек приводим к одинаковому: недостающие точки ставим на середину.
+function norm(pts, n) {
+  if (pts.length === n) return pts;
+  if (pts.length === 2 && n === 3) return [pts[0], [(pts[0][0] + pts[1][0]) / 2, (pts[0][1] + pts[1][1]) / 2], pts[1]];
+  return pts;
+}
+function drawPose(e, fa, fb, t) {
+  const A = e.frames[fa], B = e.frames[fb];
+  const k = ease(Math.max(0, Math.min(1, t)));
+  figEls.head.setAttribute("cx", lerp(A.h[0], B.h[0], k));
+  figEls.head.setAttribute("cy", lerp(A.h[1], B.h[1], k));
+  A.l.forEach((pa, i) => {
+    const n = Math.max(pa.length, B.l[i].length);
+    const a = norm(pa, n), b = norm(B.l[i], n);
+    figEls.lines[i].setAttribute("points", a.map((p, j) => `${lerp(p[0], b[j][0], k).toFixed(1)},${lerp(p[1], b[j][1], k).toFixed(1)}`).join(" "));
+  });
+  figEls.ghost.style.display = fa === 0 && fb === 0 ? "none" : "";
+}
+function drawArrows(e, frame, visible, pulse) {
+  figEls.arrows.innerHTML = "";
+  if (!visible) return;
+  (e.frames[frame].ar || []).forEach(({ a }) => {
+    const ln = document.createElementNS(NS, "line");
+    Object.entries({ x1: a[0], y1: a[1], x2: a[2], y2: a[3], stroke: "var(--accent)", "stroke-width": 3, "stroke-linecap": "round", "marker-end": "url(#ah)", opacity: 0.55 + 0.45 * pulse }).forEach(([k, v]) => ln.setAttribute(k, v));
+    figEls.arrows.appendChild(ln);
+  });
+}
+
+// --- Сценарий «видео» ---
+let cur = EX[0], steps = [], total = 0, t = 0, playing = false, last = 0, lastStepKey = "";
+const opt = { reps: 0, hold: 0 };
+const INTRO = 2.5, MOVE = 1.4, BACK = 1.6, REST = 0.8;
+
+function buildSteps() {
+  const e = cur;
+  const holdSec = e.hold ? opt.hold : 0;
+  const sides = e.sides ? e.sides.length : 1;
+  const total = opt.reps * sides;
+  steps = [];
+  for (let r = 0; r < total; r++) {
+    const side = e.sides ? e.sides[r % sides] : null;
+    const repNum = e.sides ? Math.floor(r / sides) + 1 : r + 1;
+    const base = { rep: repNum, side, idx: r };
+    steps.push({ ...base, kind: "pose", f: [0, 0], dur: r === 0 ? INTRO : REST, cap: 0 });
+    steps.push({ ...base, kind: "move", f: [0, 1], dur: MOVE, cap: 1 });
+    steps.push({ ...base, kind: "move", f: [1, 2], dur: MOVE, cap: 2 });
+    steps.push({ ...base, kind: "hold", f: [2, 2], dur: holdSec || 1.2, cap: 2, timed: !!holdSec });
+    steps.push({ ...base, kind: "back", f: [2, 0], dur: BACK, cap: -1 });
+  }
+  let acc = 0;
+  steps.forEach((s) => { s.start = acc; acc += s.dur; });
+  return acc;
+}
+function stepAt(time) {
+  for (let i = steps.length - 1; i >= 0; i--) if (time >= steps[i].start) return [steps[i], i];
+  return [steps[0], 0];
+}
+const fmt = (s) => `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, "0")}`;
+
+function render() {
+  const e = cur;
+  const [s, i] = stepAt(Math.min(t, total - 1e-6));
+  const local = (t - s.start) / s.dur;
+  drawPose(e, s.f[0], s.f[1], s.kind === "pose" || s.kind === "hold" ? 1 : local);
+  const shownFrame = s.kind === "move" ? (local > 0.5 ? s.f[1] : s.f[0]) : s.kind === "back" ? (local > 0.5 ? 0 : 2) : s.f[1];
+  const pulse = 0.5 + 0.5 * Math.sin(t * 6);
+  drawArrows(e, shownFrame, s.kind !== "back" && s.kind !== "pose", pulse);
+  $("frameBadge").textContent = s.kind === "back" ? "↩" : String(shownFrame + 1);
+  const reps = opt.reps;
+  $("repTag").textContent = `повтор ${s.rep} / ${reps}`;
+  $("sideTag").hidden = !s.side;
+  if (s.side) $("sideTag").textContent = s.side;
+  const holdOn = s.kind === "hold" && s.timed;
+  $("holdBox").hidden = !holdOn;
+  if (holdOn) $("holdNum").textContent = Math.max(1, Math.ceil(s.dur - (t - s.start)));
+  const capText = s.cap === -1 ? "Плавно вернитесь в положение 1." : (s.kind === "hold" && !s.timed ? e.caps[2] : e.caps[s.cap]);
+  const capLabel = s.cap === -1 ? "↩" : `${s.cap + 1}.`;
+  const key = `${i}`;
+  if (key !== lastStepKey) {
+    $("caption").innerHTML = `<span class="k">${capLabel}</span>${capText}`;
+    if (playing) speak(s, capText);
+    lastStepKey = key;
+  }
+  const pct = (t / total) * 100;
+  $("fill").style.width = pct + "%";
+  $("knob").style.left = pct + "%";
+  $("timeline").setAttribute("aria-valuenow", Math.round(pct));
+  $("time").textContent = `${fmt(t)} / ${fmt(total)}`;
+}
+
+// --- Озвучка ---
+let voiceOn = false;
+function speak(s, text) {
+  if (!voiceOn || !("speechSynthesis" in window)) return;
+  let say = null;
+  if (s.idx === 0) say = s.kind === "hold" ? (s.timed ? "Держите" : null) : text;
+  else if (s.kind === "pose") say = s.side ? `Повтор ${s.rep}. ${s.side}` : `Повтор ${s.rep}`;
+  else if (s.kind === "hold" && s.timed) say = "Держите";
+  else if (s.kind === "back") say = "Вернитесь";
+  if (!say) return;
+  try {
+    speechSynthesis.cancel();
+    const u = new SpeechSynthesisUtterance(say);
+    u.lang = "ru-RU";
+    u.rate = 1;
+    speechSynthesis.speak(u);
+  } catch {}
+}
+
+// --- Управление ---
+function tick(now) {
+  if (!playing) return;
+  const dt = Math.min(0.1, (now - last) / 1000);
+  last = now;
+  t += dt;
+  if (t >= total) { t = total; playing = false; render(); finish(); updatePlay(); return; }
+  render();
+  requestAnimationFrame(tick);
+}
+function play() {
+  if (t >= total) { t = 0; lastStepKey = ""; }
+  playing = true;
+  $("overlay").hidden = true;
+  $("finish").hidden = true;
+  last = performance.now();
+  lastStepKey = "";
+  updatePlay();
+  requestAnimationFrame(tick);
+}
+function pause() { playing = false; updatePlay(); try { speechSynthesis.cancel(); } catch {} }
+function updatePlay() { $("playBtn").textContent = playing ? "Пауза" : t > 0 && t < total ? "Продолжить" : "Старт"; }
+function seek(time) { t = Math.max(0, Math.min(total, time)); lastStepKey = ""; $("overlay").hidden = true; render(); updatePlay(); }
+function jumpFrame(dir) {
+  pause();
+  const [, i] = stepAt(Math.min(t, total - 1e-6));
+  const keyIdx = steps.map((_, j) => j).filter((j) => steps[j].kind !== "back");
+  let target;
+  if (dir > 0) target = keyIdx.find((j) => j > i);
+  else { const before = keyIdx.filter((j) => j < i); target = before.length ? before[before.length - 1] : 0; }
+  if (target === undefined) return;
+  const s = steps[target];
+  seek(s.kind === "move" ? s.start + s.dur - 0.001 : s.start + 0.001);
+}
+function finish() {
+  done.add(cur.id);
+  store.set("spine-done", [...done]);
+  renderNav();
+  $("finish").hidden = false;
+  $("answer").hidden = true;
+  $("nextEx").hidden = cur === EX[EX.length - 1];
+  try { if (voiceOn) { speechSynthesis.cancel(); const u = new SpeechSynthesisUtterance("Подход завершён"); u.lang = "ru-RU"; speechSynthesis.speak(u); } } catch {}
+}
+
+function renderDose() {
+  const e = cur, d = $("dose");
+  d.innerHTML = "";
+  const mk = (label, id, arr, val, suffix) => {
+    if (arr.length < 2) return;
+    const l = document.createElement("label");
+    l.htmlFor = id;
+    l.textContent = label;
+    const sel = document.createElement("select");
+    sel.id = id;
+    arr.forEach((v) => { const o = document.createElement("option"); o.value = v; o.textContent = v + suffix; if (v === val) o.selected = true; sel.appendChild(o); });
+    sel.onchange = () => { opt[id === "selReps" ? "reps" : "hold"] = +sel.value; pause(); total = buildSteps(); seek(0); $("overlay").hidden = false; };
+    l.appendChild(sel);
+    d.appendChild(l);
+  };
+  mk(e.sides ? "Повторов на сторону" : "Повторов", "selReps", e.reps, opt.reps, "");
+  if (e.hold) mk("Удержание", "selHold", e.hold, opt.hold, " с");
+}
+
+function load(e) {
+  pause();
+  cur = e;
+  opt.reps = e.reps[e.reps.length - 1];
+  opt.hold = e.hold ? e.hold[0] : 0;
+  $("exTitle").textContent = `${String(e.id).padStart(2, "0")} · ${e.title}`;
+  $("exPhase").textContent = e.stage === 1 ? "Этап 1 · пока есть боль" : "Этап 2 · когда боль утихла, с разрешения врача ЛФК";
+  $("doseText").textContent = e.unit;
+  $("why").textContent = e.why;
+  buildScene(e);
+  total = buildSteps();
+  const ticks = $("ticks");
+  ticks.innerHTML = "";
+  steps.forEach((s, i) => { if (i > 0 && s.kind === "pose") { const d = document.createElement("div"); d.className = "tick"; d.style.left = (s.start / total) * 100 + "%"; ticks.appendChild(d); } });
+  renderDose();
+  t = 0; lastStepKey = "";
+  $("overlay").hidden = false;
+  $("finish").hidden = true;
+  render();
+  updatePlay();
+  renderNav();
+  try { history.replaceState(null, "", "#ex" + e.id); } catch {}
+}
+
+$("playBtn").onclick = () => (playing ? pause() : play());
+$("bigPlay").onclick = play;
+$("restart").onclick = () => { seek(0); play(); };
+$("prevFrame").onclick = () => jumpFrame(-1);
+$("nextFrame").onclick = () => jumpFrame(1);
+$("voice").onclick = () => {
+  voiceOn = !voiceOn;
+  $("voice").setAttribute("aria-pressed", String(voiceOn));
+  if (!voiceOn) try { speechSynthesis.cancel(); } catch {}
+};
+$("noPain").onclick = () => { const a = $("answer"); a.hidden = false; a.textContent = "Хорошо. Продолжайте в том же темпе, дышите ровно, не задерживайте дыхание."; };
+$("pain").onclick = () => { const a = $("answer"); a.hidden = false; a.textContent = "Работайте только в безболезненной амплитуде: уменьшите движение. Если боль усиливается в покое или ночью, растёт с каждой неделей, есть онемение или слабость в ногах — сначала к врачу."; };
+$("nextEx").onclick = () => { const i = EX.indexOf(cur); if (i < EX.length - 1) { load(EX[i + 1]); $("player").scrollIntoView({ behavior: "smooth", block: "start" }); } };
+
+const tl = $("timeline");
+const posToTime = (x) => { const r = tl.getBoundingClientRect(); return ((x - r.left) / r.width) * total; };
+let dragging = false;
+tl.addEventListener("pointerdown", (ev) => { dragging = true; tl.setPointerCapture(ev.pointerId); pause(); seek(posToTime(ev.clientX)); });
+tl.addEventListener("pointermove", (ev) => { if (dragging) seek(posToTime(ev.clientX)); });
+tl.addEventListener("pointerup", () => { dragging = false; });
+tl.addEventListener("keydown", (ev) => {
+  if (ev.key === "ArrowRight") { seek(t + 2); ev.preventDefault(); }
+  if (ev.key === "ArrowLeft") { seek(t - 2); ev.preventDefault(); }
+});
+document.addEventListener("keydown", (ev) => {
+  if (ev.code === "Space" && !["BUTTON", "SELECT", "INPUT"].includes(document.activeElement?.tagName)) { ev.preventDefault(); playing ? pause() : play(); }
+});
+
+const m = /^#ex(\d)$/.exec(location.hash);
+load(EX.find((e) => m && e.id === +m[1]) || EX[0]);
+})();
+</script>
