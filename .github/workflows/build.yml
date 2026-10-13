@@ -4,6 +4,9 @@ on:
   push:
   workflow_dispatch:
 
+permissions:
+  contents: write
+
 jobs:
   windows-exe:
     runs-on: windows-latest
@@ -22,3 +25,11 @@ jobs:
         with:
           name: Attestation-windows
           path: dist/Attestation.exe
+      - name: Публикация в Releases
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: >
+          gh release create "v1.${{ github.run_number }}" dist/Attestation.exe
+          --target "${{ github.sha }}"
+          --title "Attestation v1.${{ github.run_number }}"
+          --notes "Программа для Windows: скачайте Attestation.exe и запустите. Установка не требуется."
