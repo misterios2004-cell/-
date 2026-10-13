@@ -1,0 +1,24 @@
+name: Сборка
+
+on:
+  push:
+  workflow_dispatch:
+
+jobs:
+  windows-exe:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Тесты
+        run: python -m unittest discover -s tests -t .
+      - name: Сборка Attestation.exe
+        run: |
+          pip install pyinstaller==6.11.1
+          pyinstaller --noconfirm Attestation.spec
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Attestation-windows
+          path: dist/Attestation.exe
